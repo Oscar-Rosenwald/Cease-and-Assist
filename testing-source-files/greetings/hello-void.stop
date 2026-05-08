@@ -1,0 +1,14 @@
+// this is a terminated comment
+
+/* this is also
+a terminated
+comment */
+
+"terminated string"
+
+'invalid but terminated character'
+
+====
+But this is an
+==== unterminated ====
+Documentation block

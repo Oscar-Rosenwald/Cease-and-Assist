@@ -1,0 +1,28 @@
+// This is a comment
+
+====
+This is a piece of documentation
+
+This should handle `markdown` things,
+- lists
+- of
+  - things
+  - like
+  - this
+
+```
+Code blocks
+```
+
+Even other ==== inline
+
+And other, which aren't four lines long
+=
+==
+===
+=====
+
+Only now does this end
+====
+
+// One more comment

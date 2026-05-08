@@ -1,0 +1,4 @@
+fn main() {
+  new message = "Stop that"
+  say message
+}
