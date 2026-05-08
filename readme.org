@@ -1,0 +1,51 @@
+* Syntax
+** Variable
+   =new <name> [: <type>] = <expr>=
+** Custom types
+*** Enum
+   #+begin_src 
+   enum[generics] <name>[generics] {
+     name [(<name>: [annotation] <type>, ...)]
+     ...
+   }
+   #+end_src
+*** Struct
+   #+begin_src 
+   struct[generics] <name>[generics] {
+     <field>: [annotation] <type>
+     ...
+   }
+   #+end_src
+*** Data
+   #+begin_src 
+   data <name> {
+     [groups: <name>, ...] // These are constraint groups such as for composite keys
+     <field>: ["maybe"] <type> [relations] [constraints]
+     ...
+   }
+   #+end_src
+**** relationships
+     - identifier
+     - table=>field [conflict resolution]
+**** constraints
+     - unique
+     - validator: <window pipe name>
+     - default: <value>
+     - [group:]index
+** Function
+   =fn <name>(<arg>: [annotation] <type>, ...) [-> [name] [annotation] <type>] {...}=
+** Pipe
+   Window pipe: =pipe (<name>: [annotation] <type>) | <name>(<arg>: [annotation] <type>) [-> [name] [annotation] <type>] {...}=
+   Grabby pipe: =pipe (<name>: [annotation] <type>) |> <name>(<arg>: [annotation] <type>) [-> [name] [annotation] <type>] {...}=
+   Method pipe:
+   #+begin_src 
+   impl["["generic [: <interface>], ..."]"] <interface>["<"<parameter_type>">"]:
+   pipe ...
+   #+end_src
+** Interfaces
+   #+begin_src 
+   interface[generics] <name>[<generics>] {
+     pipe (self) | <name> ...
+     pipe (self) |> <name> ...
+   }
+   #+end_src

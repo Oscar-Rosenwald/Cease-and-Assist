@@ -1,0 +1,8 @@
+fn msg() -> string {
+  "Stop that"
+}
+
+fn main() {
+  new message = msg()
+  say message
+}

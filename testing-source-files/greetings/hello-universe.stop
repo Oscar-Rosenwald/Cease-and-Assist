@@ -1,0 +1,21 @@
+pipe (in: string) | twice() -> string {
+  in + in
+}
+
+pipe (in: string) |> msg(end: string) -> string {
+  new msg = end
+  | twice
+
+  in + msg
+}
+
+fn msg() -> string {
+  new msg = "Stop"
+  |> msg "that"
+
+  return msg
+}
+
+fn main() {
+  say msg()
+}

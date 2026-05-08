@@ -1,0 +1,4 @@
+// This is documentation
+fn main() {
+  say "Stop that" // This is a comment
+}
