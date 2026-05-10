@@ -1,4 +1,7 @@
-// This is documentation
+====
+This is documentation
+====
+// this is a comment
 fn main() {
   say "Stop that" // This is a comment
 }
