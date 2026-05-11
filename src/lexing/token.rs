@@ -1,3 +1,4 @@
+use std::convert::Into;
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::string::ToString;
@@ -135,4 +136,39 @@ pub enum Access {
     Package,     // :
     ChillPipe,   // |
     GrabbyPIpe,  // |>
+}
+
+pub enum TypeAnnotation {
+    Mut,
+    Ref,
+    Locked,
+    Writable,
+    Readable,
+    Into,
+    Iterated,
+    Maybe,
+    Failing,
+    Expanding,
+}
+
+impl TryFrom<&str> for TypeAnnotation {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        use TypeAnnotation::*;
+        Ok(match value {
+            "mut" | "*" => Mut,
+            "ref" | "&" => Ref,
+            "locked" | "#" => Locked,
+            "writable" | "." => Writable,
+            "readable" | "~" => Readable,
+            "into" | "=" => Into,
+            "iterated" | ">" => Iterated,
+            "maybe" | "?" => Maybe,
+            "failing" | "!" => Failing,
+            "expand" | "+" => Expanding,
+
+            _ => return Err(()),
+        })
+    }
 }

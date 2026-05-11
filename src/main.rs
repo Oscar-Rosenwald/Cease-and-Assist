@@ -6,6 +6,7 @@ use lexing::token::Token;
 
 mod common;
 mod lexing;
+mod lexing2;
 
 #[derive(Parser)]
 struct Arg {

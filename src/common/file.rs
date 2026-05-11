@@ -49,7 +49,7 @@ impl FileLine {
     }
 
     /// Register the column number (starts from 1).
-    pub fn add_column(&mut self, column: usize) -> FileLocation {
+    pub fn add_column(&self, column: usize) -> FileLocation {
         FileLocation {
             line: self.line,
             name: self.name.clone(),
