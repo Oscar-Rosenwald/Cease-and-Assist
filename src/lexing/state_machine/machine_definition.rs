@@ -1,5 +1,6 @@
 use super::comment::{CommentMachine, MultilineCommentMachine};
 use super::documentation::DocumentationMachine;
+use super::types::*;
 use crate::lexing::lexer::Character;
 use crate::lexing::token::*;
 
@@ -74,6 +75,11 @@ pub enum MultilineCommentState {
     Star, // Termination candidate
 }
 
+/*
+====
+<any markdown text including strings of = unless there are exactly 4 in a row alone on a line>
+====
+*/
 pub enum DocumentationState {
     Reading,
     TerminationCandidate,
@@ -83,7 +89,7 @@ pub enum DocumentationState {
     FourEqual,
 }
 
-enum FunctionState {
+pub enum FunctionState {
     Generics,
     Name,
     Arguments,
@@ -91,24 +97,66 @@ enum FunctionState {
     Body,
 }
 
+// "[" <name> [: <<type>>] [, ...] "]"
 enum GenericDeclarationState {
     Name,
-    Constraints,
+    Parameters, // = a type (interface)
 }
 
+// "(" <name>: <<type>> [, ...] ")"
 enum ArgState {
     Name,
     Type,
 }
 
-enum TypeState {
-    NameOrAnnotation,
-    Constraints,
+// [<annotation>] <name> ["<" <<parameter>> [, ...] ">"]
+pub enum TypeState {
+    NameOrAnnotation(String),
+    Name(String), // If annotation found, next must be a name
+    Parameters(Box<ParameterMachine>),
+}
+
+// "<"  <<type>> [, ...] ">"
+pub enum ParameterState {
+    Type(Box<TypeMachine>), // Very useful enum, this.
 }
 
 /// Parses the return types in pipe/function signatures.
-enum ReturnState {
+pub enum ReturnState {
     Arrow,
+    Name,
+    Type,
+}
+
+/*
+struct <name>["<" <<parameter>> [, ...] ">" ] {
+    <<struct-field>> ...
+}
+*/
+pub enum StructState {
+    Name,
+    Parameters,
+    Body,
+}
+
+// <name>: <<type>>,
+pub enum StructFieldState {
+    Name,
+    Type,
+}
+
+/*
+enum <name> {
+    <<enum-field>> ...
+}
+*/
+pub enum EnumState {
+    Name,
+    Field,
+}
+
+// <name> [( <<type>> )]
+pub enum EnumFieldState {
     Name,
     Type,
 }

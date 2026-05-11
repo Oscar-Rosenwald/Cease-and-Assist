@@ -1,73 +1,68 @@
 use std::fmt::Display;
 use std::string::ToString;
 
-#[derive(Clone)]
-struct LineLocation {
-    word_number: usize,
-    char_number_in_word: usize,
+#[derive(Debug, Clone)]
+pub enum Location {
+    File(String),
+    Line {
+        file_name: String,
+        line_number: usize,
+    },
+    Position {
+        file_name: String,
+        line_number: usize,
+        column_number: usize,
+    },
 }
 
-impl Display for LineLocation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "word {}, character in word: {}",
-            self.word_number, self.char_number_in_word
-        )
+impl Location {
+    pub fn file<S: ToString>(file_name: S) -> Self {
+        Self::File(file_name.to_string())
     }
-}
 
-#[derive(Clone)]
-pub struct FileLocation {
-    /// Name of the file
-    name: String,
-    /// Line number, starts from 1 because it's meant for human consumption.
-    line: usize,
-    /// Character number in `line`, starts from 1 because I'm not insane.
-    column: usize,
-}
-
-impl Display for FileLocation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", self.name, self.line, self.column)
-    }
-}
-
-#[derive(Clone)]
-pub struct FileLine {
-    name: String,
-    line: usize,
-}
-
-impl FileLine {
-    /// Create an instance of self on the given line (starts from 1).
-    pub fn new<S: ToString>(file_name: S, line: usize) -> Self {
-        Self {
-            name: file_name.to_string(),
-            line,
+    pub fn line<S: ToString>(file_name: S, line_number: usize) -> Self {
+        Self::Line {
+            file_name: file_name.to_string(),
+            line_number,
         }
     }
 
-    /// Register the column number (starts from 1).
-    pub fn add_column(&mut self, column: usize) -> FileLocation {
-        FileLocation {
-            line: self.line,
-            name: self.name.clone(),
-            column: column,
+    pub fn column<S: ToString>(file_name: S, line_number: usize, column_number: usize) -> Self {
+        Self::Position {
+            file_name: file_name.to_string(),
+            line_number,
+            column_number,
         }
     }
 
-    pub fn file_name(&self) -> String {
-        self.name.clone()
-    }
-
-    pub fn line_number(&self) -> usize {
-        self.line
+    pub fn add_column(&self, column_number: usize) -> Self {
+        match self {
+            Self::Line {
+                file_name,
+                line_number,
+            } => Self::Position {
+                file_name: file_name.clone(),
+                line_number: line_number.clone(),
+                column_number,
+            },
+            other => other.clone(),
+        }
     }
 }
 
-impl Display for FileLine {
+impl Display for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.name, self.line)
+        match self {
+            Self::File(location) => write!(f, "{location}"),
+            Self::Line {
+                file_name,
+                line_number,
+            } => write!(f, "{file_name}:{line_number}"),
+            Self::Position {
+                file_name,
+                line_number,
+                column_number,
+            } => write!(f, "{file_name}:{line_number}:{column_number}"),
+        }
     }
 }

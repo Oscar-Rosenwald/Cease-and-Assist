@@ -1,56 +1,70 @@
+use std::error::Error as CoreError;
 use std::fmt::Display;
 use std::string::ToString;
 
 use super::file::*;
 
+pub type Result<T> = core::result::Result<T, LexingError>;
+
+#[derive(Debug)]
 pub struct LexingError {
     msg: String,
-    location: Location,
+    location: Option<Location>,
+    error: Option<Box<dyn CoreError>>,
 }
 
 impl LexingError {
-    pub fn new<S: ToString>(msg: S, location: FileLocation) -> Self {
+    pub fn bare<S: ToString>(msg: S) -> Self {
         Self {
             msg: msg.to_string(),
-            location: Location::Position(location),
+            error: None,
+            location: None,
         }
     }
 
-    pub fn no_line<S1: ToString, S2: ToString>(msg: S1, file_name: S2) -> Self {
+    pub fn new<S: ToString>(msg: S, location: Location) -> Self {
         Self {
             msg: msg.to_string(),
-            location: Location::File(file_name.to_string()),
+            location: Some(location),
+            error: None,
         }
     }
 
-    pub fn no_file<S: ToString>(msg: S) -> Self {
+    pub fn wrap<S: ToString, E: CoreError + 'static>(msg: S, e: E, location: Location) -> Self {
         Self {
             msg: msg.to_string(),
-            location: Location::Line(FileLine::new("pre_processing", 0)),
+            location: Some(location),
+            error: Some(Box::new(e)),
+        }
+    }
+}
+
+impl CoreError for LexingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self.error {
+            None => None,
+            Some(ref e) => Some(e.as_ref()),
         }
     }
 }
 
 impl Display for LexingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} - {}", self.location, self.msg)
+        match (&self.location, &self.error) {
+            (None, None) => write!(f, "{}", self.msg),
+            (None, Some(e)) => write!(f, "{}: {e}", self.msg),
+            (Some(l), None) => write!(f, "{l}: {}", self.msg),
+            (Some(l), Some(e)) => write!(f, "{l}: {}: {e}", self.msg),
+        }
     }
 }
 
-pub type Result<T> = core::result::Result<T, LexingError>;
-
-enum Location {
-    File(String),
-    Line(FileLine),
-    Position(FileLocation),
+pub trait ToLexingError {
+    fn wrap_location<S: ToString>(self, msg: S, location: Location) -> LexingError;
 }
 
-impl Display for Location {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::File(location) => write!(f, "{location}"),
-            Self::Line(location) => write!(f, "{location}"),
-            Self::Position(location) => write!(f, "{location}"),
-        }
+impl ToLexingError for std::io::Error {
+    fn wrap_location<S: ToString>(self, msg: S, location: Location) -> LexingError {
+        LexingError::wrap(msg, self, location)
     }
 }
