@@ -3,7 +3,6 @@ use std::string::ToString;
 
 use crate::common::file;
 
-pub const DOCUMENTATION_BOUNDRY: char = '=';
 pub const STRING_BOUNDRY: char = '"';
 pub const CHAR_BOUNDRY: char = '\'';
 
@@ -18,9 +17,10 @@ pub enum TokenType {
     WordSeparator(WordSeparator), // A character which breaks up a word, like ':' or '-' or '('. Not a space.
     String(String),               // Anything surrounded by ""
     Char(String), // Anything surrounded by ''. Is a string because error checking of this sort happens later.
+    Number(i32),
     Documentation(String), // Block of text surrounded by lines with '===='
-    Keyword(Keyword), // fn and the like
-    Literal(String), // Anything else
+    Keyword(Keyword),      // fn and the like
+    Literal(String),       // Anything else
 }
 
 impl Token {
@@ -40,6 +40,7 @@ impl Token {
             TokenType::Char(character) => {
                 format!("char: {} '{}'", self.location, character.to_string())
             }
+            TokenType::Number(number) => format!("num: {} {number}", self.location),
             TokenType::Documentation(doc) => format!("docs: {} {}", self.location, doc.to_string()),
             TokenType::Keyword(keyword) => {
                 format!("keyword: {} {}", self.location, keyword.to_string())
@@ -58,6 +59,7 @@ impl ToString for Token {
             TokenType::WordSeparator(separator) => separator.to_string(),
             TokenType::String(sentense) => sentense.to_string(),
             TokenType::Char(character) => character.to_string(),
+            TokenType::Number(number) => format!("{number}"),
             TokenType::Documentation(doc) => doc.to_string(),
             TokenType::Keyword(keyword) => keyword.to_string(),
             TokenType::Literal(literal) => literal.to_string(),
