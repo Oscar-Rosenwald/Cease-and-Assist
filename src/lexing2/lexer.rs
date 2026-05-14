@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
+use std::{cell::RefCell, rc::Rc};
 
 use super::token::*;
 use crate::common::errors::{self, ToLexingError};
@@ -19,9 +20,8 @@ pub fn parse_file(file_path: &Path) -> errors::Result<Vec<Token>> {
     let lines = io::BufReader::new(file).lines();
 
     let mut lexer = Lexer {
-        state: LexerState::Other,
+        state: Rc::new(RefCell::new(LexerState::Normal(String::new()))),
         tokens: Vec::new(),
-        current_token: String::new(),
     };
 
     for (line_index, line) in lines.enumerate() {
@@ -31,12 +31,8 @@ pub fn parse_file(file_path: &Path) -> errors::Result<Vec<Token>> {
             e.wrap_location("Failed to read line", location.add_column(line_index + 1))
         })?;
 
-        for word in line.split_whitespace() {
-            for char in word.chars() {
-                lexer.push_char(char);
-            }
-
-            lexer.push_end_of_word();
+        for char in line.chars() {
+            lexer.push_char(char);
         }
 
         lexer.push_newline();
@@ -46,115 +42,213 @@ pub fn parse_file(file_path: &Path) -> errors::Result<Vec<Token>> {
 }
 
 pub struct Lexer {
-    state: LexerState,
+    state: Rc<RefCell<LexerState>>,
     tokens: Vec<Token>,
-    current_token: String,
 }
 
 impl Lexer {
-    fn push_newline(&mut self) {
-        let last = self.tokens.last();
-        if last.eq(&Some(&Token::Newline)) {
+    fn push_char(&mut self, c: char) {
+        let state = self.state.clone();
+        let mut state = state.borrow_mut();
+
+        match &mut *state {
+            LexerState::Normal(word) => self.normal_push_char(c, word),
+            LexerState::String(sentense) => self.string_push_char(c, sentense),
+            LexerState::Char(character) => self.char_push_char(c, character),
+            LexerState::Documentation(doc) => self.documentation_push_char(c, doc),
+            LexerState::Comment {
+                terminator,
+                last_char,
+            } => self.comment_push_char(c, last_char, terminator),
+        }
+    }
+
+    fn normal_handle_word(&mut self, word: &str) {
+        let token = match Keyword::try_from(word) {
+            Ok(keyword) => Token::Keyword(keyword),
+            Err(_) => Token::Literal(word.to_string()),
+        };
+
+        self.tokens.push(token);
+        self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+    }
+
+    fn normal_push_char(&mut self, c: char, word: &mut String) {
+        if c.is_whitespace() {
+            if !word.is_empty() {
+                self.normal_handle_word(&word);
+            }
             return;
         }
 
-        let is_doc = self.current_token == DOCUMENTATION_TAG;
+        let last_char = word.chars().last().unwrap_or(' ');
 
-        match &self.state {
-            LexerState::Other => self.tokens.push(Token::Newline),
-            LexerState::String => self.tokens.push(Token::Newline),
-            LexerState::Char => self.tokens.push(Token::Newline), // not valid, but we'll sort that out later
-            LexerState::Comment(terminator) => match terminator {
-                CommentTerminator::Newline => self.state = LexerState::Other,
-                CommentTerminator::StarSlash => {}
-            },
-            LexerState::Documentation if is_doc => self.state = LexerState::String,
-            LexerState::Documentation => self.tokens.push(Token::Newline),
+        if c == '/' && last_char == '/' {
+            word.pop();
+            self.normal_handle_word(word);
+            self.state = Rc::new(RefCell::new(LexerState::Comment {
+                terminator: CommentTerminator::Newline,
+                last_char: ' ',
+            }));
+            return;
+        }
+
+        if c == '*' && last_char == '/' {
+            word.pop();
+            self.normal_handle_word(word);
+            self.state = Rc::new(RefCell::new(LexerState::Comment {
+                terminator: CommentTerminator::StarSlash,
+                last_char: ' ',
+            }));
+            return;
+        }
+
+        if c == STRING_BOUNDRY {
+            self.normal_handle_word(word);
+            self.state = Rc::new(RefCell::new(LexerState::String(String::new())));
+            return;
+        }
+
+        if c == CHAR_BOUNDRY {
+            self.normal_handle_word(word);
+            self.state = Rc::new(RefCell::new(LexerState::Char(String::new())));
+            return;
+        }
+
+        match WordSeparator::try_from(c) {
+            Ok(separator) => {
+                self.normal_handle_word(&word);
+                self.tokens.push(Token::WordSeparator(separator));
+                self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+            }
+            Err(_) => {
+                word.push(c);
+                return;
+            }
         }
     }
 
-    fn push_end_of_word(&mut self) {
-        match &self.state {
-            LexerState::String => {}
-            LexerState::Char => {} // not valid, but we'll sort that out later
-            LexerState::Documentation => {}
-            LexerState::Comment(_) => {}
-            LexerState::Other => {
-                let literal = std::mem::take(&mut self.current_token);
-                self.tokens.push(Token::Literal(literal));
+    fn string_push_char(&mut self, c: char, sentense: &mut String) {
+        if c != STRING_BOUNDRY {
+            sentense.push(c);
+            return;
+        }
+
+        let escaped_chars_count = sentense.chars().rev().take_while(|c| *c == '\\').count();
+        let is_escaped = escaped_chars_count % 2 == 1;
+
+        if is_escaped {
+            sentense.push(c);
+        } else {
+            self.tokens.push(Token::String(sentense.to_string()));
+            self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+        }
+    }
+
+    fn char_push_char(&mut self, c: char, character: &mut String) {
+        if c != CHAR_BOUNDRY {
+            character.push(c);
+            return;
+        }
+
+        let is_escaped = character
+            .chars()
+            .last()
+            .map(|last| last == '\\')
+            .unwrap_or(false);
+
+        if is_escaped {
+            character.push(c);
+        } else {
+            self.tokens.push(Token::Char(character.to_string()));
+            self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+        }
+    }
+
+    fn documentation_push_char(&mut self, c: char, doc: &mut String) {
+        doc.push(c);
+    }
+
+    fn comment_push_char(
+        &mut self,
+        new_char: char,
+        last_char: &mut char,
+        terminator: &CommentTerminator,
+    ) {
+        match terminator {
+            CommentTerminator::Newline => *last_char = new_char,
+            CommentTerminator::StarSlash => {
+                if new_char == '/' && *last_char == '*' {
+                    self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+                } else {
+                    *last_char = new_char;
+                }
             }
         }
     }
 
-    fn push_char(&mut self, c: char) {
-        let current_state = &self.state;
+    fn push_newline(&mut self) {
+        let state = self.state.clone();
+        let mut state = state.borrow_mut();
 
-        match current_state {
-            LexerState::Documentation => self.current_token.push(c),
-            LexerState::String => {
-                if c == STRING_BOUNDTRY {
-                    // TODO: Add escaped quotes.
-                    let literal = std::mem::take(&mut self.current_token);
-                    self.tokens.push(Token::String(literal));
-                    self.state = LexerState::Other;
-                } else {
-                    self.current_token.push(c);
-                }
-            }
-            LexerState::Char => {
-                if c == CHAR_BOUNDRY {
-                    // TODO: escaped quote
-                    let literal = std::mem::take(&mut self.current_token);
-                    self.tokens.push(Token::Char(literal));
-                    self.state = LexerState::Other;
-                } else {
-                    // This may not be valid, but we'll sort that out later
-                    self.current_token.push(c);
-                }
-            }
-            LexerState::Comment(terminator) => {
+        match &mut *state {
+            LexerState::String(sentense) => sentense.push('\n'),
+            LexerState::Char(character) => character.push('\n'),
+            LexerState::Comment {
+                terminator,
+                last_char: _,
+            } => {
                 if let CommentTerminator::Newline = terminator {
-                    self.current_token.push(c);
-                    return;
+                    self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
                 }
-
-                if c.to_string() != WordSeparator::Slash.to_string() {
-                    self.current_token.push(c);
-                    return;
-                }
-
-                let last_char = self.current_token.chars().last().unwrap_or(' ');
-                if last_char.to_string() != WordSeparator::Star.to_string() {
-                    self.current_token.push(c);
-                    return;
-                }
-
-                self.state = LexerState::Other;
             }
-            LexerState::Other => {
-                if self.current_token.ends_with("/") {
-                    if c == '/' {
-                        self.current_token.pop();
-                        self.state = LexerState::Comment(CommentTerminator::Newline);
-                        return;
-                    }
-                    if c == '*' {
-                        self.current_token.pop();
-                        self.state = LexerState::Comment(CommentTerminator::StarSlash);
-                        return;
-                    }
+            LexerState::Normal(_) => {
+                let last_tokens: Vec<char> = self
+                    .tokens
+                    .iter()
+                    .rev()
+                    .take(5)
+                    .map(|token| todo!("Convert token to a char (or string)"))
+                    .collect();
+
+                if self.is_documentation_boundry(last_tokens) {
+                    (0..4).map(|_| self.tokens.pop()); // Remove the last four '='s.
+                    self.state = Rc::new(RefCell::new(LexerState::Documentation(String::new())));
                 }
+            }
+            LexerState::Documentation(doc) => {
+                // NEXT: Copy is_documentation_boundry but with the string
+                // (because Doc pushes even word separators into the string)
             }
         }
+    }
+
+    fn is_documentation_boundry(&self, last_tokens: Vec<char>) -> bool {
+        if last_tokens.len() != 5 {
+            return false;
+        }
+
+        let has_four_equals = last_tokens[..4]
+            .iter()
+            .fold(true, |all_equals, x| all_equals && *x == '\n');
+
+        if !has_four_equals {
+            return false;
+        }
+
+        return last_tokens[4] == '\n';
     }
 }
 
 enum LexerState {
-    String,
-    Char,
-    Documentation,
-    Comment(CommentTerminator),
-    Other, // We'll spend most of the time here
+    Normal(String), // We'll spend most of the time here
+    String(String),
+    Char(String),
+    Documentation(String),
+    Comment {
+        terminator: CommentTerminator,
+        last_char: char,
+    },
 }
 
 enum CommentTerminator {

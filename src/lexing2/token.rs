@@ -1,8 +1,8 @@
 use std::convert::TryFrom;
 use std::string::ToString;
 
-pub const DOCUMENTATION_TAG: &'static str = "====";
-pub const STRING_BOUNDTRY: char = '"';
+pub const DOCUMENTATION_BOUNDRY: char = '=';
+pub const STRING_BOUNDRY: char = '"';
 pub const CHAR_BOUNDRY: char = '\'';
 
 #[derive(PartialEq, Eq)]
@@ -12,6 +12,7 @@ pub enum Token {
     String(String),               // Anything surrounded by ""
     Char(String), // Anything surrounded by ''. Is a string because error checking of this sort happens later.
     Documentation(String), // Block of text surrounded by lines with '===='
+    Keyword(Keyword), // fn and the like
     Literal(String), // Anything else
 }
 
@@ -152,6 +153,7 @@ impl ToString for Quote {
     }
 }
 
+#[derive(PartialEq, Eq)]
 pub enum Keyword {
     Function,  // fn
     Pipe,      // pipe
