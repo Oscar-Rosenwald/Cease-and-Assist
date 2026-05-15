@@ -17,7 +17,7 @@ pub enum TokenType {
     WordSeparator(WordSeparator), // A character which breaks up a word, like ':' or '-' or '('. Not a space.
     String(String),               // Anything surrounded by ""
     Char(String), // Anything surrounded by ''. Is a string because error checking of this sort happens later.
-    Number(i32),
+    Number(u32),
     Documentation(String), // Block of text surrounded by lines with '===='
     Keyword(Keyword),      // fn and the like
     Literal(String),       // Anything else
@@ -221,10 +221,9 @@ pub enum Keyword {
     Unlock,    // unlock
     Maybe,     // maybe
     Failing,   // failing
-    Noerror,   // noerror
     Public,    // pub
     Private,   // private
-    Nothing,   // nothing
+    Void,      // void
     Interface, // interface
     Impl,      // impl
     Use,       // use
@@ -251,10 +250,9 @@ impl TryFrom<&str> for Keyword {
             "unlock" => Keyword::Unlock,
             "maybe" => Keyword::Maybe,
             "failing" => Keyword::Failing,
-            "noerror" => Keyword::Noerror,
             "pub" => Keyword::Public,
             "private" => Keyword::Private,
-            "nothing" => Keyword::Nothing,
+            "void" => Keyword::Void,
             "interface" => Keyword::Interface,
             "impl" => Keyword::Impl,
             "use" => Keyword::Use,
@@ -281,10 +279,9 @@ impl ToString for Keyword {
             Keyword::Unlock => "unlock",
             Keyword::Maybe => "maybe",
             Keyword::Failing => "failing",
-            Keyword::Noerror => "noerror",
             Keyword::Public => "pub",
             Keyword::Private => "private",
-            Keyword::Nothing => "nothing",
+            Keyword::Void => "void",
             Keyword::Interface => "interface",
             Keyword::Impl => "impl",
             Keyword::Use => "use",

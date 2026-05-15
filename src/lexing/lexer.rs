@@ -99,7 +99,7 @@ impl Lexer {
 
         let token = if let Ok(keyword) = Keyword::try_from(word) {
             Token::new(TokenType::Keyword(keyword), location)
-        } else if let Ok(number) = word.parse::<i32>() {
+        } else if let Ok(number) = word.parse::<u32>() {
             Token::new(TokenType::Number(number), location)
         } else {
             Token::new(TokenType::Literal(word.to_string()), location)

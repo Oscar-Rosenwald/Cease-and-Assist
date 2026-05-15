@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow};
 use clap::Parser;
 use std::path::PathBuf;
 
+mod ast;
 mod common;
 mod lexing;
 
