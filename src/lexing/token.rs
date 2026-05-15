@@ -11,7 +11,7 @@ pub struct Token {
     pub location: file::Location,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TokenType {
     Newline,                      // \n
     WordSeparator(WordSeparator), // A character which breaks up a word, like ':' or '-' or '('. Not a space.
@@ -21,6 +21,7 @@ pub enum TokenType {
     Documentation(String), // Block of text surrounded by lines with '===='
     Keyword(Keyword),      // fn and the like
     Literal(String),       // Anything else
+    Group(GroupedChar),    // == etc.
 }
 
 impl Token {
@@ -48,6 +49,9 @@ impl Token {
             TokenType::Literal(literal) => {
                 format!("literal: {} {}", self.location, literal.to_string())
             }
+            TokenType::Group(group) => {
+                format!("group: {} {}", self.location, group.to_string())
+            }
         }
     }
 }
@@ -63,11 +67,18 @@ impl ToString for Token {
             TokenType::Documentation(doc) => doc.to_string(),
             TokenType::Keyword(keyword) => keyword.to_string(),
             TokenType::Literal(literal) => literal.to_string(),
+            TokenType::Group(group) => group.to_string(),
         }
     }
 }
 
-#[derive(PartialEq, Eq)]
+impl ToString for &Token {
+    fn to_string(&self) -> String {
+        (*self).to_string()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WordSeparator {
     Dot,          // .
     Comma,        // ,
@@ -173,38 +184,7 @@ impl ToString for WordSeparator {
     }
 }
 
-pub(super) enum Quote {
-    SingleQuote, // '
-    DoubleQuote, // "
-    Grave,       // `
-}
-
-// TODO used?
-impl TryFrom<char> for Quote {
-    type Error = ();
-
-    fn try_from(value: char) -> Result<Self, Self::Error> {
-        Ok(match value {
-            '\'' => Self::SingleQuote,
-            '"' => Self::DoubleQuote,
-            '`' => Self::Grave,
-            _ => return Err(()),
-        })
-    }
-}
-
-impl ToString for Quote {
-    fn to_string(&self) -> String {
-        match self {
-            Self::SingleQuote => "'",
-            Self::DoubleQuote => r#"""#,
-            Self::Grave => "`",
-        }
-        .to_string()
-    }
-}
-
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Keyword {
     Function,  // fn
     Pipe,      // pipe
@@ -285,6 +265,100 @@ impl ToString for Keyword {
             Keyword::Interface => "interface",
             Keyword::Impl => "impl",
             Keyword::Use => "use",
+        }
+        .to_string()
+    }
+}
+
+/// For special symbols which, when present without a newline between them,
+/// should be treated as a single token despite being also [`WordSeparator`]s.
+/// E.g. == or -> or ().
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupedChar {
+    PlusPlus,       // ++
+    MinusMinus,     // --
+    EqualEqual,     // ==
+    NotEqual,       // !=
+    LessOrEqual,    // <=
+    GreaterOrEqual, // >=
+    Arrow,          // ->
+    DoubleArrow,    // =>
+    ColonColon,     // ::
+    Tuple,          // ()
+    Empty,          // {}
+    StarStar,       // **
+    Error,          // !!
+    GrabbyPipe,     // |>
+    And,            // &&
+    Or,             // ||
+}
+
+impl GroupedChar {
+    /// Reports whether the character may be a part of a GroupedChar set.
+    pub(super) fn is_candidate<'a, S: Into<&'a str>>(s: S) -> bool {
+        match s.into() {
+            "+" => true,
+            "-" => true,
+            "=" => true,
+            "!" => true,
+            "<" => true,
+            ">" => true,
+            ":" => true,
+            "(" => true,
+            "{" => true,
+            "*" => true,
+            "|" => true,
+            "&" => true,
+            _ => false,
+        }
+    }
+}
+
+impl TryFrom<&str> for GroupedChar {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, ()> {
+        Ok(match value {
+            "++" => GroupedChar::PlusPlus,
+            "--" => GroupedChar::MinusMinus,
+            "==" => GroupedChar::EqualEqual,
+            "!=" => GroupedChar::NotEqual,
+            "<=" => GroupedChar::LessOrEqual,
+            ">=" => GroupedChar::GreaterOrEqual,
+            "->" => GroupedChar::Arrow,
+            "=>" => GroupedChar::DoubleArrow,
+            "::" => GroupedChar::ColonColon,
+            "()" => GroupedChar::Tuple,
+            "{}" => GroupedChar::Empty,
+            "**" => GroupedChar::StarStar,
+            "!!" => GroupedChar::Error,
+            "|>" => GroupedChar::GrabbyPipe,
+            "&&" => GroupedChar::And,
+            "||" => GroupedChar::Or,
+            _ => return Err(()),
+        })
+    }
+}
+
+impl ToString for GroupedChar {
+    fn to_string(&self) -> String {
+        match self {
+            GroupedChar::PlusPlus => "++",
+            GroupedChar::MinusMinus => "--",
+            GroupedChar::EqualEqual => "==",
+            GroupedChar::NotEqual => "!=",
+            GroupedChar::LessOrEqual => "<=",
+            GroupedChar::GreaterOrEqual => ">=",
+            GroupedChar::Arrow => "->",
+            GroupedChar::DoubleArrow => "=>",
+            GroupedChar::ColonColon => "::",
+            GroupedChar::Tuple => "()",
+            GroupedChar::Empty => "{}",
+            GroupedChar::StarStar => "**",
+            GroupedChar::Error => "!!",
+            GroupedChar::GrabbyPipe => "|>",
+            GroupedChar::And => "&&",
+            GroupedChar::Or => "||",
         }
         .to_string()
     }

@@ -22,6 +22,7 @@ pub fn parse_file(file_path: &Path) -> errors::Result<Vec<Token>> {
     let mut lexer = Lexer {
         state: Rc::new(RefCell::new(LexerState::Normal(String::new()))),
         tokens: Vec::new(),
+        maybe_doc_boundry: false,
     };
 
     for (line_index, line) in lines.enumerate() {
@@ -43,7 +44,7 @@ pub fn parse_file(file_path: &Path) -> errors::Result<Vec<Token>> {
     }
 
     let location = Location::file(file_name);
-    let tokens = lexer.tokens;
+    let mut tokens = lexer.tokens;
     let last_state = Rc::try_unwrap(lexer.state)
         .expect("Who's using my state?")
         .into_inner();
@@ -65,23 +66,67 @@ pub fn parse_file(file_path: &Path) -> errors::Result<Vec<Token>> {
                 Err(LexingError::new("Unterminated multiline comment", location))
             }
         },
+        LexerState::TokenCandidate {
+            candidate,
+            start_location,
+        } => {
+            unreachable!("Improperly handled token candidate {candidate} at {start_location}")
+        }
     }?;
+
+    tokens.pop_if(|t| match t.type_ {
+        TokenType::Newline => true,
+        _ => false,
+    });
 
     return Ok(tokens);
 }
 
 pub struct Lexer {
     state: Rc<RefCell<LexerState>>,
+    maybe_doc_boundry: bool,
     tokens: Vec<Token>,
 }
 
 impl Lexer {
+    fn push_token(&mut self, token_type: TokenType, location: Location) {
+        self.tokens.push(Token::new(token_type, location));
+    }
+
+    fn push_newline_token(&mut self, location: Location) {
+        let is_newline = |t: &Token| match t.type_ {
+            TokenType::Newline => true,
+            _ => false,
+        };
+
+        let last_is_newline = self.tokens.last().map(is_newline).unwrap_or(false);
+
+        if last_is_newline {
+            return;
+        }
+
+        self.push_token(TokenType::Newline, location);
+    }
+
+    fn push_and_reset(&mut self, token_type: TokenType, location: Location) {
+        self.push_token(token_type, location);
+        self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+    }
+
     fn push_char(&mut self, c: char, location: Location) {
         let state = self.state.clone();
         let mut state = state.borrow_mut();
 
+        if c != '=' {
+            self.maybe_doc_boundry = false;
+        }
+
         match &mut *state {
             LexerState::Normal(word) => self.normal_push_char(c, word, location),
+            LexerState::TokenCandidate {
+                candidate,
+                start_location,
+            } => self.token_candidate_push_char(c, candidate, start_location.clone(), location),
             LexerState::String(sentense) => self.string_push_char(c, sentense, location),
             LexerState::Char(character) => self.char_push_char(c, character, location),
             LexerState::Documentation(doc) => self.documentation_push_char(c, doc),
@@ -97,16 +142,15 @@ impl Lexer {
             return;
         }
 
-        let token = if let Ok(keyword) = Keyword::try_from(word) {
-            Token::new(TokenType::Keyword(keyword), location)
+        let token_type = if let Ok(keyword) = Keyword::try_from(word) {
+            TokenType::Keyword(keyword)
         } else if let Ok(number) = word.parse::<u32>() {
-            Token::new(TokenType::Number(number), location)
+            TokenType::Number(number)
         } else {
-            Token::new(TokenType::Literal(word.to_string()), location)
+            TokenType::Literal(word.to_string())
         };
 
-        self.tokens.push(token);
-        self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+        self.push_and_reset(token_type, location);
     }
 
     fn normal_push_char(&mut self, c: char, word: &mut String, location: Location) {
@@ -124,22 +168,12 @@ impl Lexer {
             .unwrap_or(String::new());
 
         if c == '/' && last_token == "/" {
-            self.tokens.pop();
-            self.normal_handle_word(word, location);
-            self.state = Rc::new(RefCell::new(LexerState::Comment {
-                terminator: CommentTerminator::Newline,
-                last_char: ' ',
-            }));
+            self.normal_handle_comment(word, location);
             return;
         }
 
         if c == '*' && last_token == "/" {
-            self.tokens.pop();
-            self.normal_handle_word(word, location);
-            self.state = Rc::new(RefCell::new(LexerState::Comment {
-                terminator: CommentTerminator::StarSlash,
-                last_char: ' ',
-            }));
+            self.normal_handle_multiline_comment(word, location);
             return;
         }
 
@@ -155,18 +189,97 @@ impl Lexer {
             return;
         }
 
-        match WordSeparator::try_from(c) {
-            Ok(separator) => {
-                self.normal_handle_word(&word, location.clone());
-                self.tokens
-                    .push(Token::new(TokenType::WordSeparator(separator), location));
-                self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
-            }
+        let separator = match WordSeparator::try_from(c) {
+            Ok(separator) => separator,
             Err(_) => {
                 word.push(c);
                 return;
             }
+        };
+
+        self.normal_handle_word(&word, location.clone());
+
+        if GroupedChar::is_candidate(c.to_string().as_str()) {
+            self.normal_handle_grouped_char_candidate(c, location);
+        } else {
+            self.push_and_reset(TokenType::WordSeparator(separator), location);
         }
+    }
+
+    fn normal_handle_grouped_char_candidate(&mut self, c: char, location: Location) {
+        self.state = Rc::new(RefCell::new(LexerState::TokenCandidate {
+            candidate: c.to_string(),
+            start_location: location,
+        }));
+    }
+
+    fn normal_handle_comment(&mut self, word: &String, location: Location) {
+        self.tokens.pop();
+        self.normal_handle_word(word, location);
+        self.state = Rc::new(RefCell::new(LexerState::Comment {
+            terminator: CommentTerminator::Newline,
+            last_char: ' ',
+        }));
+    }
+
+    fn normal_handle_multiline_comment(&mut self, word: &String, location: Location) {
+        self.tokens.pop();
+        self.normal_handle_word(word, location);
+        self.state = Rc::new(RefCell::new(LexerState::Comment {
+            terminator: CommentTerminator::StarSlash,
+            last_char: ' ',
+        }));
+    }
+
+    fn token_candidate_push_char(
+        &mut self,
+        c: char,
+        candidate: &mut String,
+        start_location: Location,
+        location: Location,
+    ) {
+        let new_candidate = format!("{candidate}{c}");
+
+        match GroupedChar::try_from(new_candidate.as_str()) {
+            // It may seem strange to push rather than store the token, but we
+            // need to handle a (hypothentical) case where --> is also a token.
+            // I we pushed the token as soon as it's recognised, then when we
+            // get to --, we'd greedily delcare that to be the MinusMinus token,
+            // but that's ignoring the --> possibility. We need to match on the
+            // whole candidate the moment that we NO LONGER match any known
+            // tokens with the new char, then push the new character separately.
+            Ok(_) => {
+                candidate.push(c);
+                return;
+            }
+            Err(_) => {}
+        }
+
+        match GroupedChar::try_from(candidate.as_str()) {
+            // Now we know it's safe to push.
+            Ok(grouped_char) => {
+                let maybe_doc_boundry = if let GroupedChar::EqualEqual = grouped_char {
+                    true
+                } else {
+                    false
+                };
+
+                self.push_and_reset(TokenType::Group(grouped_char), start_location);
+                self.push_char(c, location);
+                self.maybe_doc_boundry = maybe_doc_boundry;
+                return;
+            }
+            Err(_) => {}
+        }
+
+        if GroupedChar::is_candidate(new_candidate.as_str()) {
+            candidate.push(c);
+            return;
+        }
+
+        self.token_candidate_abort(candidate, start_location);
+        self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+        self.push_char(c, location);
     }
 
     fn string_push_char(&mut self, c: char, sentense: &mut String, location: Location) {
@@ -181,11 +294,7 @@ impl Lexer {
         if is_escaped {
             sentense.push(c);
         } else {
-            self.tokens.push(Token::new(
-                TokenType::String(sentense.to_string()),
-                location,
-            ));
-            self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+            self.push_and_reset(TokenType::String(sentense.to_string()), location);
         }
     }
 
@@ -204,9 +313,7 @@ impl Lexer {
         if is_escaped {
             character.push(c);
         } else {
-            self.tokens
-                .push(Token::new(TokenType::Char(character.to_string()), location));
-            self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+            self.push_and_reset(TokenType::Char(character.to_string()), location);
         }
     }
 
@@ -234,6 +341,7 @@ impl Lexer {
 
     fn push_newline(&mut self, location: Location) {
         let state = self.state.clone();
+        let maybe_doc_boundry = self.maybe_doc_boundry;
         let mut state = state.borrow_mut();
 
         match &mut *state {
@@ -242,56 +350,153 @@ impl Lexer {
             LexerState::Comment {
                 terminator,
                 last_char: _,
-            } => {
-                if let CommentTerminator::Newline = terminator {
-                    self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
-                }
-            }
+            } => self.comment_handle_newline(terminator, location),
             LexerState::Normal(word) => {
-                let last_tokens: Vec<String> = self
-                    .tokens
-                    .iter()
-                    .rev()
-                    .take(5)
-                    .map(|token| token.to_string())
-                    .collect();
-
-                if is_documentation_boundry(last_tokens) {
-                    // Remove the last four '='s.
-                    (0..4).for_each(|_| {
-                        self.tokens.pop();
-                    });
-                    self.state = Rc::new(RefCell::new(LexerState::Documentation(String::new())));
-                } else {
-                    self.normal_handle_word(word, location.clone());
-                    self.tokens.push(Token::new(TokenType::Newline, location));
-                }
+                self.normal_handle_newline(word, maybe_doc_boundry, location)
             }
-            LexerState::Documentation(doc) => {
-                let last_chars: Vec<String> =
-                    doc.chars().rev().take(5).map(|c| c.to_string()).collect();
+            LexerState::Documentation(doc) => self.documentation_handle_newline(doc, location),
+            LexerState::TokenCandidate {
+                candidate,
+                start_location,
+            } => self.token_candidate_handle_newline(candidate, start_location, location),
+        }
+    }
 
-                if is_documentation_boundry(last_chars) {
-                    // Remove the last four '='s and the extra newline.
-                    (0..5).for_each(|_| {
-                        doc.pop();
-                    });
-                    self.tokens.push(Token::new(
-                        TokenType::Documentation(doc.to_string()),
-                        location,
-                    ));
-                    self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
-                } else {
-                    doc.push('\n');
-                }
+    fn token_candidate_abort(&mut self, candidate: &String, start_location: Location) {
+        for (char_index, char) in candidate.chars().enumerate() {
+            // All characters of the GroupedChar candidates are word separators,
+            // so they can be pushed directly, accounting for the columns.
+
+            let separator = WordSeparator::try_from(char)
+                .expect("non-word-separator character treated as a word separator");
+
+            self.push_token(
+                TokenType::WordSeparator(separator),
+                start_location.add_column(char_index),
+            );
+        }
+    }
+
+    fn comment_handle_newline(&mut self, terminator: &CommentTerminator, location: Location) {
+        if let CommentTerminator::Newline = terminator {
+            self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+        }
+        self.push_newline_token(location);
+    }
+
+    fn normal_handle_newline(
+        &mut self,
+        word: &mut String,
+        maybe_doc_boundry: bool,
+        location: Location,
+    ) {
+        if !maybe_doc_boundry {
+            self.normal_handle_word(word, location.clone());
+            self.push_newline_token(location);
+            return;
+        }
+
+        let mut reversed_tokens: Vec<String> = word.chars().rev().map(|c| c.to_string()).collect();
+        let mut last_tokens: Vec<String> =
+            self.tokens.iter().rev().map(|t| t.to_string()).collect();
+        reversed_tokens.append(&mut last_tokens);
+
+        if !is_documentation_boundry(reversed_tokens.iter()) {
+            self.normal_handle_word(word, location.clone());
+            self.push_newline_token(location);
+            return;
+        }
+
+        // Remove the last two '=='s.
+        for _ in 0..2 {
+            self.tokens.pop();
+        }
+
+        self.state = Rc::new(RefCell::new(LexerState::Documentation(String::new())));
+        return;
+    }
+
+    fn documentation_handle_newline(&mut self, doc: &mut String, location: Location) {
+        if !is_documentation_boundry(doc.chars().rev()) {
+            doc.push('\n');
+            return;
+        }
+
+        // Remove the last two '=='s and the extra newline.
+        for _ in 0.. {
+            let c = doc.pop();
+            if c.is_none() {
+                break;
+            }
+            if c.unwrap() == '\n' {
+                break;
             }
         }
+
+        self.push_and_reset(TokenType::Documentation(doc.to_string()), location);
+    }
+
+    fn token_candidate_handle_newline(
+        &mut self,
+        candidate: &String,
+        start_location: &Location,
+        current_location: Location,
+    ) {
+        if !self.maybe_doc_boundry {
+            self.token_candidate_process_eol(candidate, start_location, current_location);
+            return;
+        }
+
+        let mut reversed_tokens = vec![candidate.to_string()];
+        let mut last_tokens: Vec<String> = self
+            .tokens
+            .iter()
+            .rev()
+            .take(2)
+            .map(|t| t.to_string())
+            .collect();
+        reversed_tokens.append(&mut last_tokens);
+
+        if !is_documentation_boundry(reversed_tokens.iter()) {
+            self.normal_handle_word(candidate, start_location.clone());
+            self.push_newline_token(current_location);
+            return;
+        }
+
+        for _ in 0..2 {
+            self.tokens.pop();
+        }
+
+        self.state = Rc::new(RefCell::new(LexerState::Documentation(String::new())));
+    }
+
+    fn token_candidate_process_eol(
+        &mut self,
+        candidate: &String,
+        start_location: &Location,
+        current_location: Location,
+    ) {
+        match GroupedChar::try_from(candidate.as_str()) {
+            Ok(grouped_char) => {
+                self.push_and_reset(TokenType::Group(grouped_char), start_location.clone());
+            }
+            Err(_) => {
+                self.token_candidate_abort(candidate, start_location.clone());
+                self.state = Rc::new(RefCell::new(LexerState::Normal(String::new())));
+            }
+        }
+
+        self.push_newline_token(current_location);
     }
 }
 
 #[derive(Debug)]
 enum LexerState {
     Normal(String), // We'll spend most of the time here
+    TokenCandidate {
+        candidate: String,
+        start_location: Location,
+    },
     String(String),
     Char(String),
     Documentation(String),
@@ -307,22 +512,44 @@ enum CommentTerminator {
     StarSlash,
 }
 
-fn is_documentation_boundry(last_tokens: Vec<String>) -> bool {
-    if last_tokens.len() < 4 {
-        return false;
+fn is_documentation_boundry<S: ToString, I: Iterator<Item = S>>(reversed_tokens: I) -> bool {
+    let mut needed_equals = 4;
+
+    for token in reversed_tokens {
+        let expect_newline = needed_equals == 0;
+        let token = token.to_string();
+
+        if token == "\n" {
+            return expect_newline;
+        }
+
+        if token == "==" {
+            needed_equals -= 2;
+            continue;
+        }
+
+        if token == "=" {
+            needed_equals -= 1;
+            continue;
+        }
+
+        let is_whitespace = token
+            .chars()
+            .fold(true, |prev, c| prev && c.is_whitespace());
+
+        if !is_whitespace {
+            return false;
+        }
     }
 
-    let has_four_equals = last_tokens[..4]
-        .iter()
-        .fold(true, |all_equals, x| all_equals && *x == "=");
+    return needed_equals == 0;
+}
 
-    if !has_four_equals {
-        return false;
     }
 
-    if last_tokens.len() == 4 {
-        return true;
+
     }
 
-    return last_tokens[4] == "\n";
+    }
+
 }

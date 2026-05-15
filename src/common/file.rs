@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::string::ToString;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Location {
     File(String),
     Line {
