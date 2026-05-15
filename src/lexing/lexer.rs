@@ -77,7 +77,7 @@ mod tests {
             .map(|token| token.type_.clone())
             .collect();
 
-        assert_eq!(tokens, expected_tokens);
+        assert_eq!(expected_tokens, tokens);
     }
 
     #[test]
@@ -150,7 +150,6 @@ mod tests {
             TokenType::Newline,
             TokenType::Literal(String::from("say")),
             TokenType::String(String::from("Stop that")),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
             TokenType::EndOfFile,
         ];
@@ -169,7 +168,6 @@ mod tests {
             TokenType::Literal(String::from("int")),
             TokenType::WordSeparator(WordSeparator::LeftBrace),
             TokenType::Number(1),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
             TokenType::Newline,
             TokenType::Keyword(Keyword::Function),
@@ -194,7 +192,6 @@ mod tests {
             TokenType::WordSeparator(WordSeparator::LeftBrace),
             TokenType::Keyword(Keyword::Return),
             TokenType::Literal(String::from("x")),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
             TokenType::Newline,
             TokenType::Documentation(String::from("Some docs to the mix.\n")),
@@ -214,7 +211,6 @@ mod tests {
             TokenType::WordSeparator(WordSeparator::LeftParen),
             TokenType::WordSeparator(WordSeparator::RightParen),
             TokenType::WordSeparator(WordSeparator::RightParen),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
             TokenType::EndOfFile,
         ];
@@ -256,7 +252,6 @@ mod tests {
             TokenType::Literal(String::from("me")),
             TokenType::WordSeparator(WordSeparator::Plus),
             TokenType::Literal(String::from("x")),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
             TokenType::Newline,
             TokenType::Keyword(Keyword::Pipe),
@@ -296,7 +291,6 @@ mod tests {
             TokenType::Newline,
             TokenType::Literal(String::from("say")),
             TokenType::Literal(String::from("x")),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
             TokenType::EndOfFile,
         ];

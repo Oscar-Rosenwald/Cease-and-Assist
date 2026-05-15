@@ -7,7 +7,7 @@ use crate::common::file;
 /// or group of symbols are represented via a token. A source file is read into
 /// a series of tokens. No type checking or validity is performed except to
 /// ensure that multi-word tokens (such as strings) are terminated.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Token {
     /// What kind of token is this, plus the value of it.
     pub type_: TokenType,

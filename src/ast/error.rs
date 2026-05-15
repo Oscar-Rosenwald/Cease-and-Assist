@@ -1,61 +1,49 @@
 use crate::lexing::*;
 
 use std::collections::VecDeque;
+use std::fmt::Display;
 
 /// An error caused by parsing an invalid series of [`Token`]s into an
 /// expression. By "invalid" we mean the tokens do not conform to the syntax of
 /// the Cease language.
+#[derive(Debug, PartialEq, Eq)]
 pub struct AstError {
     pub message: String,
-    pub tokens: Vec<Token>,
+    pub failing_tokens: Vec<Token>,
+    pub remaining_tokens: VecDeque<Token>,
 }
 
 impl AstError {
-    pub fn empty<S: ToString>(msg: S) -> Self {
+    pub fn empty<S: ToString>(msg: S, remaining_tokens: VecDeque<Token>) -> Self {
         Self {
             message: msg.to_string(),
-            tokens: Vec::new(),
+            failing_tokens: vec![],
+            remaining_tokens,
         }
     }
 
-    pub fn tokens<S: ToString>(msg: S, tokens: Vec<Token>) -> Self {
+    pub fn tokens<S: ToString>(
+        msg: S,
+        failing_tokens: Vec<Token>,
+        remaining_tokens: VecDeque<Token>,
+    ) -> Self {
         Self {
             message: msg.to_string(),
-            tokens,
+            failing_tokens,
+            remaining_tokens,
         }
     }
 }
 
-pub struct ParseError {
-    pub error: AstError,
-    pub tokens: VecDeque<Token>,
-}
-
-impl ParseError {
-    pub fn empty<S: ToString>(msg: S, tokens: VecDeque<Token>) -> Self {
-        let ast_error = AstError {
-            message: msg.to_string(),
-            tokens: Vec::new(),
-        };
-
-        Self {
-            error: ast_error,
-            tokens,
-        }
-    }
-
-    pub fn tokens<S: ToString>(msg: S, error_tokens: Vec<Token>, tokens: VecDeque<Token>) -> Self {
-        let ast_error = AstError {
-            message: msg.to_string(),
-            tokens: error_tokens,
-        };
-
-        Self {
-            error: ast_error,
-            tokens,
-        }
+impl Display for AstError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Did a little syntactic oopsie, didn't we? {}",
+            self.message
+        ) // TODO Eventually we'd like to print the tokens as well.
     }
 }
 
 /// A `Result` wrapper for the [`AstError`] type.
-pub type AstResult<T> = Result<T, ParseError>;
+pub type AstResult<T> = Result<T, AstError>;

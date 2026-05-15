@@ -2,6 +2,21 @@ use super::*;
 
 use std::collections::VecDeque;
 
+pub trait ExpressionTrait
+where
+    Self: Sized,
+{
+    fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)>;
+
+    #[cfg(test)]
+    fn to_expression(self) -> Expression;
+
+    fn start(&self) -> Location;
+
+    fn end(&self) -> Option<Location>;
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Literal {
     Bool(bool),
     String(String),
@@ -11,51 +26,61 @@ pub enum Literal {
     Name(String), // variable name etc.
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Expression {
     Calculation(Equality),
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Equality {
     pub base: Logic,
     pub rest: Option<(operation::Equality, Logic)>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Logic {
     pub base: Comparison,
     pub rest: Vec<(operation::Logic, Comparison)>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Comparison {
     pub base: Sum,
     pub rest: Option<(operation::Comparison, Sum)>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Sum {
     pub base: Product,
     pub rest: Vec<(operation::Sum, Product)>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Product {
     pub base: BinaryArithmetic,
     pub rest: Vec<(operation::Product, BinaryArithmetic)>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct BinaryArithmetic {
     pub base: Unary,
     pub rest: Option<(operation::BinaryArithmetic, Unary)>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Unary {
     pub operation: Option<operation::Unary>,
     pub base: Base,
-    start_location: Location,
+    pub(super) start_location: Location,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Base {
     kind: BaseKind,
     location: FileLocation,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum BaseKind {
     Literal(Literal),
     Group(Box<Expression>),
@@ -77,14 +102,19 @@ impl Expression {
     }
 }
 
-impl Equality {
+impl ExpressionTrait for Equality {
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Expression::Calculation(self)
+    }
+
     fn start(&self) -> Location {
         self.base.start()
     }
 
     fn end(&self) -> Option<Location> {
         match self.rest.iter().last() {
-            None => None,
+            None => self.base.end(),
             Some(last) => last.1.end(),
         }
     }
@@ -123,14 +153,23 @@ impl Equality {
     }
 }
 
-impl Logic {
+impl ExpressionTrait for Logic {
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Equality {
+            base: self,
+            rest: None,
+        }
+        .to_expression()
+    }
+
     fn start(&self) -> Location {
         self.base.start()
     }
 
     fn end(&self) -> Option<Location> {
         match self.rest.iter().last() {
-            None => None,
+            None => self.base.end(),
             Some(last) => last.1.end(),
         }
     }
@@ -177,14 +216,23 @@ impl Logic {
     }
 }
 
-impl Comparison {
+impl ExpressionTrait for Comparison {
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Logic {
+            base: self,
+            rest: vec![],
+        }
+        .to_expression()
+    }
+
     fn start(&self) -> Location {
         self.base.start()
     }
 
     fn end(&self) -> Option<Location> {
         match self.rest.iter().last() {
-            None => None,
+            None => self.base.end(),
             Some(last) => last.1.end(),
         }
     }
@@ -228,14 +276,23 @@ impl Comparison {
     }
 }
 
-impl Sum {
+impl ExpressionTrait for Sum {
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Comparison {
+            base: self,
+            rest: None,
+        }
+        .to_expression()
+    }
+
     fn start(&self) -> Location {
         self.base.start()
     }
 
     fn end(&self) -> Option<Location> {
         match self.rest.iter().last() {
-            None => None,
+            None => self.base.end(),
             Some(last) => last.1.end(),
         }
     }
@@ -253,7 +310,7 @@ impl Sum {
                 Some(token) => match token.type_ {
                     TokenType::WordSeparator(ref separator) => match separator {
                         WordSeparator::Plus => Some(operation::Sum::Plus),
-                        WordSeparator::Slash => Some(operation::Sum::Minus),
+                        WordSeparator::Minus => Some(operation::Sum::Minus),
                         _ => None,
                     },
                     _ => None,
@@ -275,14 +332,23 @@ impl Sum {
     }
 }
 
-impl Product {
+impl ExpressionTrait for Product {
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Sum {
+            base: self,
+            rest: vec![],
+        }
+        .to_expression()
+    }
+
     fn start(&self) -> Location {
         self.base.start()
     }
 
     fn end(&self) -> Option<Location> {
         match self.rest.iter().last() {
-            None => None,
+            None => self.base.end(),
             Some(last) => last.1.end(),
         }
     }
@@ -322,14 +388,23 @@ impl Product {
     }
 }
 
-impl BinaryArithmetic {
+impl ExpressionTrait for BinaryArithmetic {
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Product {
+            base: self,
+            rest: vec![],
+        }
+        .to_expression()
+    }
+
     fn start(&self) -> Location {
         self.base.start()
     }
 
     fn end(&self) -> Option<Location> {
         match self.rest.iter().last() {
-            None => None,
+            None => self.base.end(),
             Some(last) => last.1.end(),
         }
     }
@@ -368,7 +443,16 @@ impl BinaryArithmetic {
     }
 }
 
-impl Unary {
+impl ExpressionTrait for Unary {
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        BinaryArithmetic {
+            base: self,
+            rest: None,
+        }
+        .to_expression()
+    }
+
     fn start(&self) -> Location {
         self.start_location.clone()
     }
@@ -380,7 +464,7 @@ impl Unary {
     fn parse_tokens(mut tokens: VecDeque<Token>) -> AstResult<(Unary, VecDeque<Token>)> {
         let (unary_operation, start_location): (Option<operation::Unary>, Option<Location>) =
             match tokens.get(0) {
-                None => return Err(ParseError::empty("Unexpected end of file", tokens)),
+                None => return Err(AstError::empty("Unexpected end of file", tokens)),
                 Some(token) => match token.type_ {
                     TokenType::WordSeparator(ref separator) => match separator {
                         WordSeparator::Exclamation => (
@@ -422,6 +506,101 @@ impl Unary {
 }
 
 impl Base {
+    #[cfg(test)]
+    pub(super) fn new(kind: BaseKind, location: FileLocation) -> Self {
+        Self { kind, location }
+    }
+
+    /// Parses `tokens` as an inner (grouped) expression surrounded by
+    /// parentheses. The first parenthesis (`(`) has already been processed. The
+    /// closing one (`)`) will be handled here. If we don't find it, we return
+    /// an error.
+    fn parse_grouped_expresssion(
+        tokens: VecDeque<Token>,
+    ) -> AstResult<(Expression, VecDeque<Token>, Location)> {
+        let (inner_expression, mut remaining_tokens) = Expression::parse_tokens(tokens)?;
+
+        let mut first_token = match remaining_tokens.pop_front() {
+            Some(token) => token,
+            None => {
+                return Err(AstError::empty("Unclosed parathentical", remaining_tokens));
+            }
+        };
+
+        let token_type = std::mem::take(&mut first_token.type_);
+        let TokenType::WordSeparator(ref separator) = token_type else {
+            first_token.type_ = token_type;
+            return Err(AstError::tokens(
+                "Expected closing parenthetical",
+                vec![first_token],
+                remaining_tokens,
+            ));
+        };
+
+        let WordSeparator::RightParen = separator else {
+            first_token.type_ = token_type;
+            return Err(AstError::tokens(
+                "Expected closing parenthetical",
+                vec![first_token],
+                remaining_tokens,
+            ));
+        };
+
+        return Ok((inner_expression, remaining_tokens, first_token.end_location));
+    }
+
+    /// Parses `tokens` after a [`WordSeparator`] has been seen. This is either
+    /// a normal word separator (e.g. `+` which in this case is an error that is
+    /// returned from here), or it's an opening parenthesis, which indicates a
+    /// [`BaseKind::Group`] subexpression (e.g. `(1 + 2)`).
+    ///
+    /// If an inner (grouped) expression is found, it is parsed and returned in
+    /// the appropriate `BaseKind`. We also return the remaining tokens, and the
+    /// end location of this grouped expression.
+    fn parse_word_separator(
+        current_token: Token,
+        separator: WordSeparator,
+        tokens: VecDeque<Token>,
+    ) -> AstResult<(BaseKind, VecDeque<Token>, Location)> {
+        let WordSeparator::LeftParen = separator else {
+            let mut offending_tokens = vec![Token::new(
+                TokenType::WordSeparator(separator),
+                current_token.start_location,
+                current_token.end_location,
+            )];
+
+            let (mut line, other_tokens) = read_line(tokens);
+            offending_tokens.append(&mut line);
+
+            return Err(AstError::tokens(
+                "Unexpected word separator",
+                offending_tokens,
+                other_tokens,
+            ));
+        };
+
+        let (inner_expression, remaining_tokens, end_location) =
+            Self::parse_grouped_expresssion(tokens)?;
+
+        return Ok((
+            BaseKind::Group(Box::new(inner_expression)),
+            remaining_tokens,
+            end_location,
+        ));
+    }
+}
+
+impl ExpressionTrait for Base {
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Unary {
+            start_location: self.location.start_location.clone(),
+            base: self,
+            operation: None,
+        }
+        .to_expression()
+    }
+
     fn start(&self) -> Location {
         self.location.start_location.clone()
     }
@@ -432,26 +611,24 @@ impl Base {
 
     fn parse_tokens(mut tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
         let mut first_token = match tokens.pop_front() {
-            None => return Err(ParseError::empty("Unexpected end of file", tokens)),
+            None => return Err(AstError::empty("Unexpected end of file", tokens)),
             Some(token) => token,
         };
 
-        let mut start_location = first_token.start_location.clone();
+        let start_location = first_token.start_location.clone();
         let mut end_location = first_token.end_location.clone();
         let token_type = std::mem::take(&mut first_token.type_);
 
         let base_kind = match token_type {
-            TokenType::Newline => return Err(ParseError::empty("Unexpected end of line", tokens)),
+            TokenType::Newline => return Err(AstError::tokens("Unexpected end of line", vec![first_token], tokens)),
             TokenType::EndOfFile => {
-                return Err(ParseError::empty("Unexpected end of file", tokens));
+                return Err(AstError::empty("Unexpected end of file", tokens));
             }
             TokenType::Documentation(_) => {
                 first_token.type_ = token_type;
-                return Err(ParseError::tokens(
-                    "Unexpected documentation block",
-                    vec![first_token],
-                    tokens,
-                ));
+                return Err(
+                    AstError::tokens("Unexpected documentation block", vec![first_token], tokens),
+                );
             }
             TokenType::Symbol(_) => {
                 first_token.type_ = token_type;
@@ -459,31 +636,19 @@ impl Base {
                 let (mut line, other_tokens) = read_line(tokens);
                 offending_tokens.append(&mut line);
 
-                return Err(ParseError::tokens(
+                return Err(AstError::tokens(
                     "Unexpected symbol",
                     offending_tokens,
                     other_tokens,
                 ));
             }
-            TokenType::WordSeparator(separator) => match separator {
-                WordSeparator::LeftParen => todo!(), // TODO must call the expression, then parse the closing parenthetical
-                _ => {
-                    let mut offending_tokens = vec![Token::new(
-                        TokenType::WordSeparator(separator),
-                        first_token.start_location,
-                        first_token.end_location,
-                    )];
-
-                    let (mut line, other_tokens) = read_line(tokens);
-                    offending_tokens.append(&mut line);
-
-                    return Err(ParseError::tokens(
-                        "Unexpected word separator",
-                        offending_tokens,
-                        other_tokens,
-                    ));
-                }
-            },
+            TokenType::WordSeparator(separator) => {
+                let (base_kind, remaining_tokens, inner_end) =
+                    Self::parse_word_separator(first_token, separator, tokens)?;
+                tokens = remaining_tokens;
+                end_location = inner_end;
+                base_kind
+            }
             TokenType::Keyword(keyword) => match keyword {
                 Keyword::True => BaseKind::Literal(Literal::Bool(true)),
                 Keyword::False => BaseKind::Literal(Literal::Bool(false)),

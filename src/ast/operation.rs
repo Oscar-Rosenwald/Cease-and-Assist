@@ -1,23 +1,23 @@
-use crate::lexing::*;
-
-use std::convert::TryFrom;
-
+#[derive(Debug, PartialEq, Eq)]
 pub enum Unary {
     Not,
     Negate,
     Dereference,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Product {
     Multiply,
     Divide,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Sum {
     Plus,
     Minus,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Comparison {
     Less,
     LessOrEqual,
@@ -25,11 +25,13 @@ pub enum Comparison {
     GreaterOrEqual,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Equality {
     Equal,
     NotEqual,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Logic {
     And,
     Or,
@@ -37,6 +39,7 @@ pub enum Logic {
     Nand,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum BinaryArithmetic {
     And,
     Or,

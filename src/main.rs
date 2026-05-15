@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     let tokens =
         lexing::lexer::parse_file(arg.target_file.as_path()).map_err(|e| anyhow!("{e}"))?;
 
-    let _abstract_syntax_tree = ast::Tree::from_tokens(tokens).map_err(|e| anyhow!("{e}"))?;
+    let _abstract_syntax_tree = ast::Tree::parse_tokens(tokens).map_err(|e| anyhow!("{e}"))?;
 
     Ok(())
 }
