@@ -2,8 +2,28 @@ use std::default::Default;
 use std::fmt::Display;
 use std::string::ToString;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
+pub struct FileLocation {
+    pub start_location: Location,
+    pub end_location: Option<Location>,
+}
+
+impl FileLocation {
+    pub fn none() -> Self {
+        Self {
+            start_location: Location::None,
+            end_location: None,
+        }
+    }
+
+    pub fn get_file_name(&self) -> String {
+        self.start_location.get_file_name()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub enum Location {
+    None,
     File(String),
     Line {
         file_name: String,
@@ -49,6 +69,22 @@ impl Location {
             other => other.clone(),
         }
     }
+
+    pub fn get_file_name(&self) -> String {
+        match self {
+            Self::File(name) => name.to_string(),
+            Self::Line {
+                file_name,
+                line_number: _,
+            } => file_name.to_string(),
+            Self::Position {
+                file_name,
+                line_number: _,
+                column_number: _,
+            } => file_name.to_string(),
+            Self::None => "N/A".to_string(),
+        }
+    }
 }
 
 impl Display for Location {
@@ -64,6 +100,7 @@ impl Display for Location {
                 line_number,
                 column_number,
             } => write!(f, "{file_name}:{line_number}:{column_number}"),
+            Self::None => write!(f, "N/A"),
         }
     }
 }

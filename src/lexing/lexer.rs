@@ -11,7 +11,7 @@ use std::path::Path;
 /// Reads code from the given file path and converts it into a series of tokens.
 /// The only processing on the tokens afterwards is that there are neveer two
 /// newlines in a row.
-pub fn parse_file(file_path: &Path) -> errors::Result<VecDeque<Token>> {
+pub fn parse_file(file_path: &Path) -> errors::LexResult<VecDeque<Token>> {
     let file_name = file_path
         .file_name()
         .ok_or(LexingError::bare("No such file"))?
@@ -41,7 +41,7 @@ fn parse_line(
     file_name: &str,
     line_number: usize,
     line: Result<String, io::Error>,
-) -> errors::Result<()> {
+) -> errors::LexResult<()> {
     let location = Location::line(file_name, line_number);
 
     let line =

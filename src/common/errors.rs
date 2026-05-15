@@ -4,7 +4,7 @@ use std::string::ToString;
 
 use super::file::*;
 
-pub type Result<T> = core::result::Result<T, LexingError>;
+pub type LexResult<T> = core::result::Result<T, LexingError>;
 
 #[derive(Debug)]
 pub struct LexingError {

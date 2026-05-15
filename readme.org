@@ -49,3 +49,55 @@
      pipe (self) |> <name> ...
    }
    #+end_src
+** Type Annotations
+   Types can be annotation. You can use words or symbols before the type (the
+   formatter will convert symbols to types anyway, but it's faster).
+
+   - ? -> maybe  ; variable may be void
+   - ! -> failing ; variable may be an error instead
+   - & -> ref ; read-only pointer
+   - * -> mut ; read-write pointer
+   - = -> into ; can be converted into that type
+   - > -> interated ; has a =| next= pipe
+   - # -> locked ; variable is behind a mutex
+   - @ -> writable ; variable is a locked read-write pointer to a mutexed variable
+   - ~ -> readable ; variable is a locked read-only pointer to a mutexed variable
+
+   Example:
+
+   =fn printStuff(stuff: =string) { stuff | into<string> | speak }=
+
+   or
+
+   =fn printStuff(stuff: into string) { stuff | into<string> | speak }=
+** Operators
+*** Error resolution
+    Checks if a failing value is an error, and if so wraps that error in the
+    argument string and returns that instead.
+
+    This is a shorthand version of some pipe I haven't named yet. Something like
+    =okay <string>= or =error <string>= or something.
+
+    #+begin_src
+      fn doStuff() -> failing void {...}
+
+      fn main() -> failing string {
+		doStuff() ?? failed to do stuff
+		return "success"
+      }
+    #+end_src
+
+    If you choose not to do this inside a pipe, the pipe will automatically skip
+    all steps after the failure untill a =??= or =okay= (or whatever the pipe
+    version of =??= is going to be) are called. Basically, pipes are always
+    automatically monadic.
+*** Debug prints
+    To print a variable at a given line when building with a --debug flag or
+    something, use =___= at the end of the line
+
+    #+begin_src
+      value
+      | pipe1 arg ___                             // Prints the result of this pipe
+      | pipe2 args args args ___ ?? Failed pipe 2 // Will print the error or the value
+      | pipe3 ?? Failed pipe 3 ___                // Will NOT print, but return an error with '___' in it
+    #+end_src

@@ -279,7 +279,7 @@ pub enum Keyword {
     Maybe,     // maybe
     Failing,   // failing
     Public,    // pub
-    Secret,    // private
+    Secret,    // sec
     Void,      // void
     Interface, // interface
     Impl,      // impl

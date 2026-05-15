@@ -40,7 +40,7 @@ impl Lexer {
     }
 
     /// Pushes any non-newline character into the lexer.
-    pub(super) fn push_char(&mut self, c: char, location: Location) -> errors::Result<Tokens> {
+    pub(super) fn push_char(&mut self, c: char, location: Location) -> errors::LexResult<Tokens> {
         if c.is_whitespace() {
             return self.push_whitespace(c, location);
         }
@@ -56,7 +56,7 @@ impl Lexer {
     /// strips the newline character at the end.
     ///
     /// It should also be called at the end of a file.
-    pub(super) fn push_newline(&mut self, location: Location) -> errors::Result<Tokens> {
+    pub(super) fn push_newline(&mut self, location: Location) -> errors::LexResult<Tokens> {
         let state = std::mem::take(&mut self.state);
 
         let (tokens, new_state) = match state {
@@ -140,7 +140,7 @@ impl Lexer {
         self,
         mut tokens: Vec<Token>,
         location: Location,
-    ) -> errors::Result<VecDeque<Token>> {
+    ) -> errors::LexResult<VecDeque<Token>> {
         tokens.push(Token::new(
             TokenType::EndOfFile,
             location.clone(),
@@ -193,7 +193,7 @@ impl Lexer {
     ///
     /// Whitespace must **NEVER** be a newline. There's a [`Self::push_newline`]
     /// for that.
-    fn push_whitespace(&mut self, new_c: char, location: Location) -> errors::Result<Tokens> {
+    fn push_whitespace(&mut self, new_c: char, location: Location) -> errors::LexResult<Tokens> {
         let state = std::mem::take(&mut self.state);
 
         let (tokens, new_state) = match state {
@@ -279,7 +279,11 @@ impl Chars {
 
     /// Pushes a character, assuming `self` is [`State::Symbols`] or its
     /// variant.
-    fn symbol_push_char(self, new_c: char, location: Location) -> errors::Result<(Tokens, State)> {
+    fn symbol_push_char(
+        self,
+        new_c: char,
+        location: Location,
+    ) -> errors::LexResult<(Tokens, State)> {
         if new_c == COMMENT_START {
             let candidate = SymbolComment {
                 chars_thus_far: Chars::new(location),
@@ -343,7 +347,11 @@ impl Chars {
     }
 
     /// Pushes a character, assuming `self` is [`State::Number`].
-    fn number_push_char(self, new_c: char, location: Location) -> errors::Result<(Tokens, State)> {
+    fn number_push_char(
+        self,
+        new_c: char,
+        location: Location,
+    ) -> errors::LexResult<(Tokens, State)> {
         if new_c.is_numeric() {
             return Ok((vec![], State::Number(self.add_char(new_c))));
         }
@@ -381,7 +389,7 @@ impl Chars {
     /// Treats self as a collection of symbols which are returned as tokens.
     /// Returns a valid state to transition into if one can be ascertained, or
     /// None if it's up to the caller.
-    fn process_symbols(self, end_location: Location) -> errors::Result<(Tokens, Option<State>)> {
+    fn process_symbols(self, end_location: Location) -> errors::LexResult<(Tokens, Option<State>)> {
         let symbol_str = self.to_string();
 
         if symbol_str == DOCUMENTATION_TAG {
@@ -435,7 +443,7 @@ impl Chars {
     }
 
     /// Turns self into a token, assuming self is the data of [`State::Number`].
-    fn process_number(self, location: Location) -> errors::Result<Token> {
+    fn process_number(self, location: Location) -> errors::LexResult<Token> {
         let word = self.to_string();
 
         word.parse::<u32>()
@@ -451,7 +459,7 @@ impl Chars {
         self,
         decimal: Vec<char>,
         location: Location,
-    ) -> errors::Result<Token> {
+    ) -> errors::LexResult<Token> {
         let word = self.to_string();
         let base = word.parse::<u32>().map_err(|e| {
             errors::LexingError::wrap(format!("Invalid number {word}"), e, location.clone())
@@ -495,7 +503,7 @@ impl StringState {
         mut self,
         new_c: char,
         location: Location,
-    ) -> errors::Result<(Tokens, State)> {
+    ) -> errors::LexResult<(Tokens, State)> {
         if self.escaped {
             // TODO Support for escaped characters
         }
@@ -588,7 +596,7 @@ impl SymbolComment {
     /// Pushes a character to `self`, handling the cases when `self` turned out
     /// to be a comment start tag, and the cases when `self` is just an
     /// over-eager `/`.
-    fn push_char(self, new_c: char, location: Location) -> errors::Result<(Tokens, State)> {
+    fn push_char(self, new_c: char, location: Location) -> errors::LexResult<(Tokens, State)> {
         if new_c == COMMENT_START {
             let (tokens, _) = self.chars_thus_far.symbol_push_char(new_c, location)?;
             let new_state = match self.comment_candidacy {
@@ -659,7 +667,7 @@ impl State {
     /// Returns the tokens which result from pushing character `c` into self,
     /// and the new state that the machine should go into. May return `None`
     /// when there is no change.
-    fn push_char(self, new_c: char, location: Location) -> errors::Result<(Tokens, State)> {
+    fn push_char(self, new_c: char, location: Location) -> errors::LexResult<(Tokens, State)> {
         Ok(match self {
             State::Whitespace => (
                 vec![],
@@ -756,7 +764,7 @@ fn decimal_push_char(
     mut decimals: Vec<char>,
     new_c: char,
     location: Location,
-) -> errors::Result<(Tokens, State)> {
+) -> errors::LexResult<(Tokens, State)> {
     if new_c.is_numeric() {
         decimals.push(new_c);
         let state = State::DecimalNumber {
