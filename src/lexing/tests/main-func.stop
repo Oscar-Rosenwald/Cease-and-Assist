@@ -1,0 +1,7 @@
+====
+This is
+main documentation
+====
+fn main() {
+   say "Stop that"
+}

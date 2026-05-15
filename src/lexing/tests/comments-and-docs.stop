@@ -1,0 +1,31 @@
+// This is a comment
+
+/// Also a comment
+
+/* multiline comment */
+
+/* multiline comment
+
+part 2*/
+
+/* and
+part three
+====
+this doesn't count as documentation
+*/
+
+====
+This is documentation.
+
+==== Still documentation ====
+=====
+And still
+=
+Still
+==
+Still
+===
+Still
+ ====
+
+     // And no more

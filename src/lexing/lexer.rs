@@ -545,11 +545,271 @@ fn is_documentation_boundry<S: ToString, I: Iterator<Item = S>>(reversed_tokens:
     return needed_equals == 0;
 }
 
+#[cfg(test)]
+mod tests {
+    use super::super::token::*;
+
+    const TEST_DIR: &'static str = "src/lexing/tests";
+
+    fn run_test(file_base_name: &str, expected_tokens: Vec<TokenType>) {
+        let file_path = std::path::PathBuf::from(format!("{TEST_DIR}/{file_base_name}.stop",));
+
+        let tokens: Vec<TokenType> = super::parse_file(&file_path)
+            .expect(&format!("Failed to parse file {file_base_name}"))
+            .iter()
+            .map(|token| token.type_.clone())
+            .collect();
+
+        assert_eq!(tokens, expected_tokens);
     }
 
-
+    #[test]
+    fn empty_file() {
+        let file = "empty";
+        run_test(file, vec![]);
     }
 
+    #[test]
+    fn comments_and_documentation() {
+        let file = "comments-and-docs";
+        let expected =vec![
+            TokenType::Documentation(
+                "This is documentation.\n\n==== Still documentation ====\n=====\nAnd still\n=\nStill\n==\nStill\n===\nStill".to_string(),
+            ),
+        ];
+
+        run_test(file, expected);
     }
 
+    #[test]
+    fn only_expressions() {
+        let file = "expressions";
+        let expected = vec![
+            TokenType::Number(1),
+            TokenType::WordSeparator(WordSeparator::Plus),
+            TokenType::Number(2),
+            TokenType::WordSeparator(WordSeparator::Star),
+            TokenType::Number(3),
+            TokenType::Group(GroupedChar::PlusPlus),
+            TokenType::Group(GroupedChar::And),
+            TokenType::Number(4),
+            TokenType::WordSeparator(WordSeparator::Slash),
+            TokenType::Number(5),
+            TokenType::Group(GroupedChar::EqualEqual),
+            TokenType::Number(6),
+            TokenType::WordSeparator(WordSeparator::LeftChevron),
+            TokenType::WordSeparator(WordSeparator::LeftParen),
+            TokenType::Number(7),
+            TokenType::WordSeparator(WordSeparator::Slash),
+            TokenType::Number(8),
+            TokenType::WordSeparator(WordSeparator::Minus),
+            TokenType::WordSeparator(WordSeparator::Minus),
+            TokenType::Number(9),
+            TokenType::WordSeparator(WordSeparator::RightParen),
+            TokenType::WordSeparator(WordSeparator::Star),
+            TokenType::WordSeparator(WordSeparator::Minus),
+            TokenType::WordSeparator(WordSeparator::LeftParen),
+            TokenType::Number(10),
+            TokenType::WordSeparator(WordSeparator::RightParen),
+        ];
+
+        run_test(file, expected);
+    }
+
+    #[test]
+    fn main_function() {
+        let file = "main-func";
+        let expected = vec![
+            TokenType::Documentation(String::from("This is\nmain documentation")),
+            TokenType::Keyword(Keyword::Function),
+            TokenType::Literal(String::from("main")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Newline,
+            TokenType::Literal(String::from("say")),
+            TokenType::String(String::from("Stop that")),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+        ];
+        run_test(file, expected);
+    }
+
+    #[test]
+    fn function_calls() {
+        let file = "function-calls";
+        let expected = vec![
+            TokenType::Keyword(Keyword::Function),
+            TokenType::Literal(String::from("function1")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::Group(GroupedChar::Arrow),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Newline,
+            TokenType::Number(1),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+            TokenType::Newline,
+            TokenType::Keyword(Keyword::Function),
+            TokenType::Literal(String::from("function2")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::Group(GroupedChar::Arrow),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Number(2),
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+            TokenType::Newline,
+            TokenType::Keyword(Keyword::Function),
+            TokenType::Literal(String::from("functionX")),
+            TokenType::WordSeparator(WordSeparator::LeftParen),
+            TokenType::Literal(String::from("x")),
+            TokenType::WordSeparator(WordSeparator::Colon),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::RightParen),
+            TokenType::Group(GroupedChar::Arrow),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Newline,
+            TokenType::Literal(String::from("return")),
+            TokenType::Literal(String::from("x")),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+            TokenType::Documentation(String::from("Some docs to the mix.")),
+            TokenType::Keyword(Keyword::Function),
+            TokenType::Literal(String::from("main")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Newline,
+            TokenType::Literal(String::from("say")),
+            TokenType::Literal(String::from("functionX")),
+            TokenType::WordSeparator(WordSeparator::LeftParen),
+            TokenType::Literal(String::from("function1")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::WordSeparator(WordSeparator::Plus),
+            TokenType::Literal(String::from("function2")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::WordSeparator(WordSeparator::RightParen),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+        ];
+
+        run_test(file, expected);
+    }
+
+    #[test]
+    fn func_and_pipe_calls() {
+        let file = "func-and-pipe-calls";
+        let expected = vec![
+            TokenType::Keyword(Keyword::Function),
+            TokenType::Literal(String::from("function1")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::Group(GroupedChar::Arrow),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Number(1),
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+            TokenType::Newline,
+            TokenType::Keyword(Keyword::Pipe),
+            TokenType::WordSeparator(WordSeparator::LeftParen),
+            TokenType::Literal(String::from("me")),
+            TokenType::WordSeparator(WordSeparator::Colon),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::RightParen),
+            TokenType::WordSeparator(WordSeparator::Bar),
+            TokenType::Literal(String::from("add")),
+            TokenType::WordSeparator(WordSeparator::LeftParen),
+            TokenType::Literal(String::from("x")),
+            TokenType::WordSeparator(WordSeparator::Colon),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::RightParen),
+            TokenType::Group(GroupedChar::Arrow),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Newline,
+            TokenType::Literal(String::from("return")),
+            TokenType::Literal(String::from("me")),
+            TokenType::WordSeparator(WordSeparator::Plus),
+            TokenType::Literal(String::from("x")),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+            TokenType::Newline,
+            TokenType::Keyword(Keyword::Pipe),
+            TokenType::WordSeparator(WordSeparator::LeftParen),
+            TokenType::Literal(String::from("me")),
+            TokenType::WordSeparator(WordSeparator::Colon),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::RightParen),
+            TokenType::Group(GroupedChar::GrabbyPipe),
+            TokenType::Literal(String::from("double")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::Group(GroupedChar::Arrow),
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Literal(String::from("me")),
+            TokenType::WordSeparator(WordSeparator::Star),
+            TokenType::Number(2),
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+            TokenType::Newline,
+            TokenType::Keyword(Keyword::Function),
+            TokenType::Literal(String::from("main")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Newline,
+            TokenType::Keyword(Keyword::New),
+            TokenType::Literal(String::from("x")),
+            TokenType::WordSeparator(WordSeparator::Equal),
+            TokenType::Literal(String::from("function1")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::Bar),
+            TokenType::Literal(String::from("add")),
+            TokenType::Number(8),
+            TokenType::Newline,
+            TokenType::Group(GroupedChar::GrabbyPipe),
+            TokenType::Literal(String::from("double")),
+            TokenType::Newline,
+            TokenType::Literal(String::from("say")),
+            TokenType::Literal(String::from("x")),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+        ];
+
+        run_test(file, expected);
+    }
+
+    #[test]
+    fn wrong_formatting() {
+        let file = "wrong-formatting";
+        let expected = vec![
+            TokenType::Keyword(Keyword::Function),
+            TokenType::WordSeparator(WordSeparator::LeftParen),
+            TokenType::Newline,
+            TokenType::Literal(String::from("x")),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::Colon),
+            TokenType::Newline,
+            TokenType::Literal(String::from("int")),
+            TokenType::WordSeparator(WordSeparator::RightParen),
+            TokenType::Group(GroupedChar::Arrow),
+            TokenType::Newline,
+            TokenType::Literal(String::from("int")),
+            TokenType::Newline,
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Newline,
+            TokenType::Literal(String::from("return")),
+            TokenType::Newline,
+            TokenType::Literal(String::from("x")),
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+            TokenType::Newline,
+            TokenType::Keyword(Keyword::Function),
+            TokenType::Literal(String::from("main")),
+            TokenType::Group(GroupedChar::Tuple),
+            TokenType::WordSeparator(WordSeparator::LeftBrace),
+            TokenType::Newline,
+            TokenType::Literal(String::from("say")),
+            TokenType::Literal(String::from("x")),
+            TokenType::WordSeparator(WordSeparator::RightBrace),
+        ];
+
+        run_test(file, expected);
+    }
 }

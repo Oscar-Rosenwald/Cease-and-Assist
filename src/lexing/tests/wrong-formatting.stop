@@ -1,0 +1,21 @@
+fn(
+x
+:
+int) ->
+int
+{
+return
+x}
+
+fn main			()		{
+
+
+
+
+
+
+
+
+
+
+say x}

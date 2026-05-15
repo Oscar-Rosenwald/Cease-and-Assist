@@ -1,0 +1,16 @@
+fn function1() -> int {
+		1
+}
+
+fn function2() -> int { 2 }
+
+fn functionX(x: int) -> int {
+		return x
+}
+
+====
+Some docs to the mix.
+====
+fn main() {
+		say functionX(function1() + function2())
+}

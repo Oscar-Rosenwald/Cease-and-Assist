@@ -1,0 +1,16 @@
+fn function1() -> int { 1 }
+
+pipe (me: int) | add(x: int) -> int {
+		return me + x
+}
+
+pipe (me: int) |> double() -> int { me * 2 }
+
+fn main() {
+		new x = function1()
+		|  add 8
+		|> double
+
+		// This is a comment
+		say x // And more comments
+}
