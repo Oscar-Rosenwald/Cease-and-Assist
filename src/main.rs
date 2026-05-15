@@ -5,6 +5,7 @@ use std::path::PathBuf;
 mod ast;
 mod common;
 mod lexing;
+mod parser;
 
 #[derive(Parser)]
 struct Arg {

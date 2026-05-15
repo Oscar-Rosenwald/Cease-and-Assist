@@ -246,7 +246,7 @@ pub enum Keyword {
     Maybe,     // maybe
     Failing,   // failing
     Public,    // pub
-    Private,   // private
+    Secret,    // sec
     Void,      // void
     Interface, // interface
     Impl,      // impl
@@ -275,7 +275,7 @@ impl TryFrom<&str> for Keyword {
             "maybe" => Keyword::Maybe,
             "failing" => Keyword::Failing,
             "pub" => Keyword::Public,
-            "private" => Keyword::Private,
+            "sec" => Keyword::Secret,
             "void" => Keyword::Void,
             "interface" => Keyword::Interface,
             "impl" => Keyword::Impl,
@@ -304,7 +304,7 @@ impl ToString for Keyword {
             Keyword::Maybe => "maybe",
             Keyword::Failing => "failing",
             Keyword::Public => "pub",
-            Keyword::Private => "private",
+            Keyword::Secret => "sec",
             Keyword::Void => "void",
             Keyword::Interface => "interface",
             Keyword::Impl => "impl",

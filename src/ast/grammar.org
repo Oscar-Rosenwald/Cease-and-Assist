@@ -1,0 +1,64 @@
+In Cease, nearly everything is an expression. The only exceptions are modules
+(as in the files and directories) and code blocks which manage them (but not
+code blocks which import them).
+
+Expressions evaluate to a value which has a type. Types are well known at
+compilation time. Special expressions (such as plain ={}= scopes) evaluate to the
+=void= type, but otherwise most code blocks return something useful.
+
+Expressions have =terminators= (expressed here as single-quoted strings) which
+must appear as they are shown in the code, and literals - predefined types of
+terminators which are not always so simple to express.
+
+* Literal Classes
+  Literals come in these flavours:
+
+  - BOOL: =true= or =false=
+  - STRING: A block of text, quoted
+  - NUMBER: Any of the number formats
+  - NAME: Name of a named expression (e.g. variable, function, ...)
+* [0/3] Expression
+  #+begin_example
+  expression -> LITERAL | maths_expression | application | definition | block | exit | builtin
+  #+end_example
+** Maths
+   Expressions which evaluate to some mathematical value, either of the =BOOL= or
+   =NUMBER= literal class.
+
+   #+begin_example
+     maths_expression    -> equality
+     equality            -> logic ( ('==' | '!=') logic )+
+     logic               -> comparison ( ('&&' | '||' | 'and' | 'or' | 'xor' | 'nand') comparison)+
+     comparison          -> sum ( ('<' | '<=' | '>' | '>=') sum )*
+     sum                 -> product ( ('+' | '-') product )*
+     product             -> binary_arithmetic ( ('*' | '/') binary_arithmetic )*
+     binary_arithmetic   -> unary ( ('&' | '|') unary )*
+     unary               -> ('!' | '-')? number_primary
+     number_primary      -> NUMBER | BOOL | '(' expression ')' | application | block
+   #+end_example
+** TODO Application
+   Function or pipe application evaluated to singular values. Contains any
+   arguments passed therein, and type constraints which may be defined.
+** TODO Definition
+   Definitions of types, functions, pipes, implementations, variables,
+   constants, etc.
+** TODO Block
+   Code blocks, standard programming paradigms like a for loop.
+** Exit
+   Keywords which exit the current block with a value.
+
+   #+begin_example
+   exit -> ( 'return' | 'break' | 'continue' ) expression
+   #+end_example
+** Builtin
+   Built-in command for easy life.
+
+   #+begin_example
+   builtin -> ( 'unlock' | 'rlock' | 'wlock' ) LITERAL
+   #+end_example
+* TODO Statements
+* TODO Abstract Syntax Tree (AST)
+* COMMENT File config
+# Local variables:
+# eval: (auto-fill-mode 1)
+# End:

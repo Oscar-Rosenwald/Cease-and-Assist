@@ -36,3 +36,8 @@ pub enum BinaryArithmetic {
     And,
     Or,
 }
+
+mod display {
+    use super::*;
+    use std::fmt::Display;
+}
