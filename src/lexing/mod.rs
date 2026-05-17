@@ -4,4 +4,5 @@
 //! terminated.
 
 pub mod lexer;
+pub mod state_machine;
 pub mod token;

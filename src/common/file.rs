@@ -1,3 +1,4 @@
+use std::default::Default;
 use std::fmt::Display;
 use std::string::ToString;
 
@@ -64,5 +65,11 @@ impl Display for Location {
                 column_number,
             } => write!(f, "{file_name}:{line_number}:{column_number}"),
         }
+    }
+}
+
+impl Default for Location {
+    fn default() -> Self {
+        Self::File(String::from(""))
     }
 }

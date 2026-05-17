@@ -3,54 +3,94 @@ use std::string::ToString;
 
 use crate::common::file;
 
-pub const STRING_BOUNDRY: char = '"';
-pub const CHAR_BOUNDRY: char = '\'';
-
+/// A token is a lexicographical unit of the parsed text. Any meaningful symbol
+/// or group of symbols are represented via a token. A source file is read into
+/// a series of tokens. No type checking or validity is performed except to
+/// ensure that multi-word tokens (such as strings) are terminated.
 pub struct Token {
+    /// What kind of token is this, plus the value of it.
     pub type_: TokenType,
-    pub location: file::Location,
+    /// Where does the token begin in the file?
+    pub start_location: file::Location,
+    /// Where does the token end in the file?
+    pub end_location: file::Location,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TokenType {
-    Newline,                      // \n
-    WordSeparator(WordSeparator), // A character which breaks up a word, like ':' or '-' or '('. Not a space.
-    String(String),               // Anything surrounded by ""
-    Char(String), // Anything surrounded by ''. Is a string because error checking of this sort happens later.
+    /// We'll only ever have one newline in a row.
+    Newline,
+    /// A character which breaks up a word, like ':' or '-' or '('. Not a space.
+    /// Some character groups such as -> are treated as a single token, and
+    /// aren't WordSeparators.
+    WordSeparator(WordSeparator),
+    /// A hard-coded series of [`WordSeparator`]s which, in a given order and no
+    /// whitespace, have semantic meaning. E.g. -> or ==.
+    Symbol(Symbol),
+    /// Anything surrounded by ""
+    String(String),
+    /// Anything surrounded by ''.
+    Char(char),
+    /// A numeric entity with no decimals.
     Number(u32),
-    Documentation(String), // Block of text surrounded by lines with '===='
-    Keyword(Keyword),      // fn and the like
-    Literal(String),       // Anything else
-    Group(GroupedChar),    // == etc.
+    /// A number and the decimals.
+    DecimalNumber(u32, u32),
+    /// Block of text surrounded by lines with '====' on a line
+    Documentation(String),
+    Keyword(Keyword),
+    /// Names of things: variables, functions, etc.
+    Literal(String),
 }
 
 impl Token {
-    pub(super) fn new(type_: TokenType, location: file::Location) -> Self {
-        Self { type_, location }
+    pub(super) fn new(
+        type_: TokenType,
+        start_location: file::Location,
+        end_location: file::Location,
+    ) -> Self {
+        Self {
+            type_,
+            start_location,
+            end_location,
+        }
     }
 
+    /// Turns the token into a string which is fit for debugging purposes.
     pub fn to_debug_string(&self) -> String {
         match &self.type_ {
-            TokenType::Newline => format!("newline: {}", self.location),
+            TokenType::Newline => format!("newline: {}", self.start_location),
             TokenType::WordSeparator(separator) => {
-                format!("separator: {} {}", self.location, separator.to_string())
+                format!(
+                    "separator: {} {}",
+                    self.start_location,
+                    separator.to_string()
+                )
             }
             TokenType::String(sentense) => {
-                format!(r#"string: {} "{}""#, self.location, sentense.to_string())
+                format!(
+                    r#"string: {} "{}""#,
+                    self.start_location,
+                    sentense.to_string()
+                )
             }
             TokenType::Char(character) => {
-                format!("char: {} '{}'", self.location, character.to_string())
+                format!("char: {} '{}'", self.start_location, character.to_string())
             }
-            TokenType::Number(number) => format!("num: {} {number}", self.location),
-            TokenType::Documentation(doc) => format!("docs: {} {}", self.location, doc.to_string()),
+            TokenType::Number(number) => format!("num: {} {number}", self.start_location),
+            TokenType::DecimalNumber(base, decimal) => {
+                format!("num: {} {base}.{decimal}", self.start_location)
+            }
+            TokenType::Documentation(doc) => {
+                format!("docs: {} {}", self.start_location, doc.to_string())
+            }
             TokenType::Keyword(keyword) => {
-                format!("keyword: {} {}", self.location, keyword.to_string())
+                format!("keyword: {} {}", self.start_location, keyword.to_string())
             }
             TokenType::Literal(literal) => {
-                format!("literal: {} {}", self.location, literal.to_string())
+                format!("literal: {} {}", self.start_location, literal.to_string())
             }
-            TokenType::Group(group) => {
-                format!("group: {} {}", self.location, group.to_string())
+            TokenType::Symbol(symbol) => {
+                format!("symbol: {} {}", self.start_location, symbol.to_string())
             }
         }
     }
@@ -64,10 +104,11 @@ impl ToString for Token {
             TokenType::String(sentense) => sentense.to_string(),
             TokenType::Char(character) => character.to_string(),
             TokenType::Number(number) => format!("{number}"),
+            TokenType::DecimalNumber(base, decimal) => format!("{base}.{decimal}"),
             TokenType::Documentation(doc) => doc.to_string(),
             TokenType::Keyword(keyword) => keyword.to_string(),
             TokenType::Literal(literal) => literal.to_string(),
-            TokenType::Group(group) => group.to_string(),
+            TokenType::Symbol(symbol) => symbol.to_string(),
         }
     }
 }
@@ -78,6 +119,9 @@ impl ToString for &Token {
     }
 }
 
+/// A word separator is a symbol which, even if it appears in the middle of
+/// another token, splits that token. Some groups of word separators become
+/// [`Symbol`]s instead.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WordSeparator {
     Dot,          // .
@@ -270,11 +314,11 @@ impl ToString for Keyword {
     }
 }
 
-/// For special symbols which, when present without a newline between them,
+/// For special symbols which, when present without whitespace between them,
 /// should be treated as a single token despite being also [`WordSeparator`]s.
-/// E.g. == or -> or ().
+/// E.g. == or -> or ++.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum GroupedChar {
+pub enum Symbol {
     PlusPlus,       // ++
     MinusMinus,     // --
     EqualEqual,     // ==
@@ -284,7 +328,6 @@ pub enum GroupedChar {
     Arrow,          // ->
     DoubleArrow,    // =>
     ColonColon,     // ::
-    Tuple,          // ()
     Empty,          // {}
     StarStar,       // **
     Error,          // !!
@@ -293,72 +336,49 @@ pub enum GroupedChar {
     Or,             // ||
 }
 
-impl GroupedChar {
-    /// Reports whether the character may be a part of a GroupedChar set.
-    pub(super) fn is_candidate<'a, S: Into<&'a str>>(s: S) -> bool {
-        match s.into() {
-            "+" => true,
-            "-" => true,
-            "=" => true,
-            "!" => true,
-            "<" => true,
-            ">" => true,
-            ":" => true,
-            "(" => true,
-            "{" => true,
-            "*" => true,
-            "|" => true,
-            "&" => true,
-            _ => false,
-        }
-    }
-}
-
-impl TryFrom<&str> for GroupedChar {
+impl TryFrom<&str> for Symbol {
     type Error = ();
 
     fn try_from(value: &str) -> Result<Self, ()> {
         Ok(match value {
-            "++" => GroupedChar::PlusPlus,
-            "--" => GroupedChar::MinusMinus,
-            "==" => GroupedChar::EqualEqual,
-            "!=" => GroupedChar::NotEqual,
-            "<=" => GroupedChar::LessOrEqual,
-            ">=" => GroupedChar::GreaterOrEqual,
-            "->" => GroupedChar::Arrow,
-            "=>" => GroupedChar::DoubleArrow,
-            "::" => GroupedChar::ColonColon,
-            "()" => GroupedChar::Tuple,
-            "{}" => GroupedChar::Empty,
-            "**" => GroupedChar::StarStar,
-            "!!" => GroupedChar::Error,
-            "|>" => GroupedChar::GrabbyPipe,
-            "&&" => GroupedChar::And,
-            "||" => GroupedChar::Or,
+            "++" => Symbol::PlusPlus,
+            "--" => Symbol::MinusMinus,
+            "==" => Symbol::EqualEqual,
+            "!=" => Symbol::NotEqual,
+            "<=" => Symbol::LessOrEqual,
+            ">=" => Symbol::GreaterOrEqual,
+            "->" => Symbol::Arrow,
+            "=>" => Symbol::DoubleArrow,
+            "::" => Symbol::ColonColon,
+            "{}" => Symbol::Empty,
+            "**" => Symbol::StarStar,
+            "!!" => Symbol::Error,
+            "|>" => Symbol::GrabbyPipe,
+            "&&" => Symbol::And,
+            "||" => Symbol::Or,
             _ => return Err(()),
         })
     }
 }
 
-impl ToString for GroupedChar {
+impl ToString for Symbol {
     fn to_string(&self) -> String {
         match self {
-            GroupedChar::PlusPlus => "++",
-            GroupedChar::MinusMinus => "--",
-            GroupedChar::EqualEqual => "==",
-            GroupedChar::NotEqual => "!=",
-            GroupedChar::LessOrEqual => "<=",
-            GroupedChar::GreaterOrEqual => ">=",
-            GroupedChar::Arrow => "->",
-            GroupedChar::DoubleArrow => "=>",
-            GroupedChar::ColonColon => "::",
-            GroupedChar::Tuple => "()",
-            GroupedChar::Empty => "{}",
-            GroupedChar::StarStar => "**",
-            GroupedChar::Error => "!!",
-            GroupedChar::GrabbyPipe => "|>",
-            GroupedChar::And => "&&",
-            GroupedChar::Or => "||",
+            Symbol::PlusPlus => "++",
+            Symbol::MinusMinus => "--",
+            Symbol::EqualEqual => "==",
+            Symbol::NotEqual => "!=",
+            Symbol::LessOrEqual => "<=",
+            Symbol::GreaterOrEqual => ">=",
+            Symbol::Arrow => "->",
+            Symbol::DoubleArrow => "=>",
+            Symbol::ColonColon => "::",
+            Symbol::Empty => "{}",
+            Symbol::StarStar => "**",
+            Symbol::Error => "!!",
+            Symbol::GrabbyPipe => "|>",
+            Symbol::And => "&&",
+            Symbol::Or => "||",
         }
         .to_string()
     }

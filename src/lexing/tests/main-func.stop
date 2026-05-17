@@ -3,5 +3,6 @@ This is
 main documentation
 ====
 fn main() {
+   'c'
    say "Stop that"
 }
