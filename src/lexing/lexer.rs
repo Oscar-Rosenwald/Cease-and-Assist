@@ -3,6 +3,7 @@ use super::token::*;
 use crate::common::errors::{self, LexingError, ToLexingError};
 use crate::common::file::*;
 
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
@@ -10,7 +11,7 @@ use std::path::Path;
 /// Reads code from the given file path and converts it into a series of tokens.
 /// The only processing on the tokens afterwards is that there are neveer two
 /// newlines in a row.
-pub fn parse_file(file_path: &Path) -> errors::Result<Vec<Token>> {
+pub fn parse_file(file_path: &Path) -> errors::Result<VecDeque<Token>> {
     let file_name = file_path
         .file_name()
         .ok_or(LexingError::bare("No such file"))?
@@ -30,9 +31,7 @@ pub fn parse_file(file_path: &Path) -> errors::Result<Vec<Token>> {
     }
 
     let location = Location::file(file_name);
-    lexer.process_eof(&mut ret_tokens, location)?;
-
-    return Ok(ret_tokens);
+    return Ok(lexer.process_eof(ret_tokens, location)?);
 }
 
 /// Turns one line into a series of tokens and writes them into `tokens`.
@@ -65,7 +64,7 @@ fn parse_line(
 
 #[cfg(test)]
 mod tests {
-    use super::super::token::*;
+    use crate::lexing::*;
 
     const TEST_DIR: &'static str = "src/lexing/tests";
 
@@ -84,7 +83,7 @@ mod tests {
     #[test]
     fn empty_file() {
         let file = "empty";
-        run_test(file, vec![]);
+        run_test(file, vec![TokenType::EndOfFile]);
     }
 
     #[test]
@@ -95,6 +94,7 @@ mod tests {
             TokenType::Documentation(
                 "This is documentation.\n\n==== Still documentation ====\n=====\nAnd still\n=\nStill\n==\nStill\n===\nStill\n".to_string(),
             ),
+            TokenType::EndOfFile,
         ];
 
         run_test(file, expected);
@@ -130,7 +130,7 @@ mod tests {
             TokenType::WordSeparator(WordSeparator::LeftParen),
             TokenType::Number(10),
             TokenType::WordSeparator(WordSeparator::RightParen),
-            TokenType::Newline,
+            TokenType::EndOfFile,
         ];
 
         run_test(file, expected);
@@ -146,14 +146,13 @@ mod tests {
             TokenType::WordSeparator(WordSeparator::LeftParen),
             TokenType::WordSeparator(WordSeparator::RightParen),
             TokenType::WordSeparator(WordSeparator::LeftBrace),
-            TokenType::Newline,
             TokenType::Char('c'),
             TokenType::Newline,
             TokenType::Literal(String::from("say")),
             TokenType::String(String::from("Stop that")),
             TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
-            TokenType::Newline,
+            TokenType::EndOfFile,
         ];
         run_test(file, expected);
     }
@@ -169,7 +168,6 @@ mod tests {
             TokenType::Symbol(Symbol::Arrow),
             TokenType::Literal(String::from("int")),
             TokenType::WordSeparator(WordSeparator::LeftBrace),
-            TokenType::Newline,
             TokenType::Number(1),
             TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
@@ -194,8 +192,7 @@ mod tests {
             TokenType::Symbol(Symbol::Arrow),
             TokenType::Literal(String::from("int")),
             TokenType::WordSeparator(WordSeparator::LeftBrace),
-            TokenType::Newline,
-            TokenType::Literal(String::from("return")),
+            TokenType::Keyword(Keyword::Return),
             TokenType::Literal(String::from("x")),
             TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
@@ -206,7 +203,6 @@ mod tests {
             TokenType::WordSeparator(WordSeparator::LeftParen),
             TokenType::WordSeparator(WordSeparator::RightParen),
             TokenType::WordSeparator(WordSeparator::LeftBrace),
-            TokenType::Newline,
             TokenType::Literal(String::from("say")),
             TokenType::Literal(String::from("functionX")),
             TokenType::WordSeparator(WordSeparator::LeftParen),
@@ -220,7 +216,7 @@ mod tests {
             TokenType::WordSeparator(WordSeparator::RightParen),
             TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
-            TokenType::Newline,
+            TokenType::EndOfFile,
         ];
 
         run_test(file, expected);
@@ -256,8 +252,7 @@ mod tests {
             TokenType::Symbol(Symbol::Arrow),
             TokenType::Literal(String::from("int")),
             TokenType::WordSeparator(WordSeparator::LeftBrace),
-            TokenType::Newline,
-            TokenType::Literal(String::from("return")),
+            TokenType::Keyword(Keyword::Return),
             TokenType::Literal(String::from("me")),
             TokenType::WordSeparator(WordSeparator::Plus),
             TokenType::Literal(String::from("x")),
@@ -287,18 +282,15 @@ mod tests {
             TokenType::WordSeparator(WordSeparator::LeftParen),
             TokenType::WordSeparator(WordSeparator::RightParen),
             TokenType::WordSeparator(WordSeparator::LeftBrace),
-            TokenType::Newline,
             TokenType::Keyword(Keyword::New),
             TokenType::Literal(String::from("x")),
             TokenType::WordSeparator(WordSeparator::Equal),
             TokenType::Literal(String::from("function1")),
             TokenType::WordSeparator(WordSeparator::LeftParen),
             TokenType::WordSeparator(WordSeparator::RightParen),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::Bar),
             TokenType::Literal(String::from("add")),
             TokenType::Number(8),
-            TokenType::Newline,
             TokenType::Symbol(Symbol::GrabbyPipe),
             TokenType::Literal(String::from("double")),
             TokenType::Newline,
@@ -306,7 +298,7 @@ mod tests {
             TokenType::Literal(String::from("x")),
             TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::RightBrace),
-            TokenType::Newline,
+            TokenType::EndOfFile,
         ];
 
         run_test(file, expected);
@@ -318,20 +310,14 @@ mod tests {
         let expected = vec![
             TokenType::Keyword(Keyword::Function),
             TokenType::WordSeparator(WordSeparator::LeftParen),
-            TokenType::Newline,
             TokenType::Literal(String::from("x")),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::Colon),
-            TokenType::Newline,
             TokenType::Literal(String::from("int")),
             TokenType::WordSeparator(WordSeparator::RightParen),
             TokenType::Symbol(Symbol::Arrow),
-            TokenType::Newline,
             TokenType::Literal(String::from("int")),
-            TokenType::Newline,
             TokenType::WordSeparator(WordSeparator::LeftBrace),
-            TokenType::Newline,
-            TokenType::Literal(String::from("return")),
+            TokenType::Keyword(Keyword::Return),
             TokenType::Newline,
             TokenType::Literal(String::from("x")),
             TokenType::WordSeparator(WordSeparator::RightBrace),
@@ -341,11 +327,10 @@ mod tests {
             TokenType::WordSeparator(WordSeparator::LeftParen),
             TokenType::WordSeparator(WordSeparator::RightParen),
             TokenType::WordSeparator(WordSeparator::LeftBrace),
-            TokenType::Newline,
             TokenType::Literal(String::from("say")),
             TokenType::Literal(String::from("x")),
             TokenType::WordSeparator(WordSeparator::RightBrace),
-            TokenType::Newline,
+            TokenType::EndOfFile,
         ];
 
         run_test(file, expected);

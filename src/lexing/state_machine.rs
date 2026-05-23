@@ -1,7 +1,9 @@
 use super::token::*;
 use crate::common::errors;
 use crate::common::file::*;
+use crate::common::slice::filter_window;
 
+use std::collections::VecDeque;
 use std::default::Default;
 use std::string::ToString;
 
@@ -136,20 +138,19 @@ impl Lexer {
     /// been terminated.
     pub(super) fn process_eof(
         self,
-        tokens: &mut Vec<Token>,
+        mut tokens: Vec<Token>,
         location: Location,
-    ) -> errors::Result<()> {
-        tokens.dedup_by(|first, second| {
-            let (TokenType::Newline, TokenType::Newline) = (&(*first).type_, &(*second).type_)
-            else {
-                return false;
-            };
-            return true;
-        });
+    ) -> errors::Result<VecDeque<Token>> {
+        tokens.push(Token::new(
+            TokenType::EndOfFile,
+            location.clone(),
+            location.clone(),
+        ));
+        let tokens = filter_window(tokens, include_middle);
 
         let error_msg = match self.state {
-            State::Whitespace => return Ok(()),
-            State::Newline => return Ok(()),
+            State::Whitespace => return Ok(tokens),
+            State::Newline => return Ok(tokens),
             State::Word(_) => "Badly processed word",
             State::Number(_) => "Badly processed number",
             State::DecimalNumber {
@@ -810,8 +811,42 @@ fn documentation_end_push_char(base: Chars, mut end: Vec<char>, new_c: char) -> 
         return (vec![], new_state);
     }
 
-    println!("Pushing new = -> {}", end.iter().collect::<String>());
     end.push(new_c);
     let new_state = State::DocumentationEnd { docs: base, end };
     return (vec![], new_state);
+}
+
+/// Reports whether the `second` token should be included in the tokens that are
+/// to be parsed by the rest of the compiler. This serves to remove duplicated
+/// newlines, or newlines where they don't belong, or generally the newlines
+/// that the user put in place and that we don't like.
+fn include_middle(first: &Token, second: &Token, third: &Token) -> bool {
+    use TokenType::*;
+    match (&first.type_, &second.type_, &third.type_) {
+        (Newline, Newline, _) => false,
+        (_, Newline, EndOfFile) => false,
+        (_, Newline, WordSeparator(separator)) => match separator {
+            super::token::WordSeparator::RightBrace => true,
+            _ => false,
+        },
+        (WordSeparator(separator), Newline, _) => match separator {
+            super::token::WordSeparator::RightBrace => true,
+            super::token::WordSeparator::RightParen => true,
+            super::token::WordSeparator::RightBracket => true,
+            _ => false,
+        },
+        (_, Newline, Symbol(_)) => false,
+        (Symbol(symbol), Newline, _) => match symbol {
+            super::token::Symbol::DebugPrint => true,
+            _ => false,
+        },
+        (Keyword(keyword), Newline, _) => match keyword {
+            super::token::Keyword::Void
+            | super::token::Keyword::Return
+            | super::token::Keyword::Continue
+            | super::token::Keyword::Break => true,
+            _ => false,
+        },
+        _ => true,
+    }
 }

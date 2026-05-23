@@ -7,6 +7,7 @@ use crate::common::file;
 /// or group of symbols are represented via a token. A source file is read into
 /// a series of tokens. No type checking or validity is performed except to
 /// ensure that multi-word tokens (such as strings) are terminated.
+#[derive(Clone)]
 pub struct Token {
     /// What kind of token is this, plus the value of it.
     pub type_: TokenType,
@@ -16,10 +17,30 @@ pub struct Token {
     pub end_location: file::Location,
 }
 
+/*
+TODO: remove when no longer using.
+
+    match  {
+        TokenType::Newline => todo!(),
+        TokenType::EndOfFile => todo!(),
+        TokenType::WordSeparator(separator) => todo!(),
+        TokenType::Symbol(symbol) => todo!(),
+        TokenType::String(sentense) => todo!(),
+        TokenType::Char(char) => todo!(),
+        TokenType::Number(number) => todo!(),
+        TokenType::DecimalNumber(base, rest) => todo!(),
+        TokenType::Documentation(doc) => todo!(),
+        TokenType::Keyword(keyword) => todo!(),
+        TokenType::Literal(literal) => todo!(),
+    }
+ */
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TokenType {
     /// We'll only ever have one newline in a row.
     Newline,
+    /// Duh.
+    EndOfFile,
     /// A character which breaks up a word, like ':' or '-' or '('. Not a space.
     /// Some character groups such as -> are treated as a single token, and
     /// aren't WordSeparators.
@@ -59,6 +80,7 @@ impl Token {
     pub fn to_debug_string(&self) -> String {
         match &self.type_ {
             TokenType::Newline => format!("newline: {}", self.start_location),
+            TokenType::EndOfFile => format!("EOF"),
             TokenType::WordSeparator(separator) => {
                 format!(
                     "separator: {} {}",
@@ -96,10 +118,21 @@ impl Token {
     }
 }
 
+impl TokenType {
+    pub fn is_whitespace(&self) -> bool {
+        match self {
+            TokenType::Newline => true,
+            TokenType::EndOfFile => true,
+            _ => false,
+        }
+    }
+}
+
 impl ToString for Token {
     fn to_string(&self) -> String {
         match &self.type_ {
-            TokenType::Newline => "\n".to_string(),
+            TokenType::Newline => "\\n".to_string(),
+            TokenType::EndOfFile => String::from("EOF"),
             TokenType::WordSeparator(separator) => separator.to_string(),
             TokenType::String(sentense) => sentense.to_string(),
             TokenType::Char(character) => character.to_string(),
@@ -246,11 +279,19 @@ pub enum Keyword {
     Maybe,     // maybe
     Failing,   // failing
     Public,    // pub
-    Private,   // private
+    Secret,    // private
     Void,      // void
     Interface, // interface
     Impl,      // impl
-    Use,       // use
+    Remote,    // use
+    And,       // and
+    Or,        // or
+    Nand,      // nand
+    Xor,       // xor
+    Not,       // not
+    Return,    // return
+    Continue,  // continue
+    Break,     // break
 }
 
 impl TryFrom<&str> for Keyword {
@@ -275,11 +316,19 @@ impl TryFrom<&str> for Keyword {
             "maybe" => Keyword::Maybe,
             "failing" => Keyword::Failing,
             "pub" => Keyword::Public,
-            "private" => Keyword::Private,
+            "sec" => Keyword::Secret,
             "void" => Keyword::Void,
             "interface" => Keyword::Interface,
             "impl" => Keyword::Impl,
-            "use" => Keyword::Use,
+            "remote" => Keyword::Remote,
+            "and" => Keyword::And,
+            "or" => Keyword::Or,
+            "nand" => Keyword::Nand,
+            "xor" => Keyword::Xor,
+            "not" => Keyword::Not,
+            "return" => Keyword::Return,
+            "continue" => Keyword::Continue,
+            "break" => Keyword::Break,
             _ => return Err(()),
         })
     }
@@ -304,11 +353,19 @@ impl ToString for Keyword {
             Keyword::Maybe => "maybe",
             Keyword::Failing => "failing",
             Keyword::Public => "pub",
-            Keyword::Private => "private",
+            Keyword::Secret => "sec",
             Keyword::Void => "void",
             Keyword::Interface => "interface",
             Keyword::Impl => "impl",
-            Keyword::Use => "use",
+            Keyword::Remote => "remote",
+            Keyword::Not => "not",
+            Keyword::And => "and",
+            Keyword::Or => "or",
+            Keyword::Nand => "nand",
+            Keyword::Xor => "xor",
+            Keyword::Return => "return",
+            Keyword::Continue => "continue",
+            Keyword::Break => "break",
         }
         .to_string()
     }
@@ -327,13 +384,14 @@ pub enum Symbol {
     GreaterOrEqual, // >=
     Arrow,          // ->
     DoubleArrow,    // =>
+    LessLess,       // <<
     ColonColon,     // ::
     Empty,          // {}
     StarStar,       // **
-    Error,          // !!
     GrabbyPipe,     // |>
     And,            // &&
     Or,             // ||
+    DebugPrint,     // ___
 }
 
 impl TryFrom<&str> for Symbol {
@@ -349,13 +407,14 @@ impl TryFrom<&str> for Symbol {
             ">=" => Symbol::GreaterOrEqual,
             "->" => Symbol::Arrow,
             "=>" => Symbol::DoubleArrow,
+            "<<" => Symbol::LessLess,
             "::" => Symbol::ColonColon,
             "{}" => Symbol::Empty,
             "**" => Symbol::StarStar,
-            "!!" => Symbol::Error,
             "|>" => Symbol::GrabbyPipe,
             "&&" => Symbol::And,
             "||" => Symbol::Or,
+            "___" => Symbol::DebugPrint,
             _ => return Err(()),
         })
     }
@@ -372,13 +431,14 @@ impl ToString for Symbol {
             Symbol::GreaterOrEqual => ">=",
             Symbol::Arrow => "->",
             Symbol::DoubleArrow => "=>",
+            Symbol::LessLess => "<<",
             Symbol::ColonColon => "::",
             Symbol::Empty => "{}",
             Symbol::StarStar => "**",
-            Symbol::Error => "!!",
             Symbol::GrabbyPipe => "|>",
             Symbol::And => "&&",
             Symbol::Or => "||",
+            Symbol::DebugPrint => "___",
         }
         .to_string()
     }

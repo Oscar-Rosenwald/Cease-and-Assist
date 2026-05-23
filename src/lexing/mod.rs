@@ -6,3 +6,7 @@
 pub mod lexer;
 pub mod state_machine;
 pub mod token;
+pub mod token_iterator;
+
+pub use token::*;
+pub use token_iterator::*;
