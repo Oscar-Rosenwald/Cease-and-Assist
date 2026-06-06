@@ -63,8 +63,14 @@ pub enum TokenType {
     Literal(String),
 }
 
+impl Default for TokenType {
+    fn default() -> Self {
+        Self::Newline
+    }
+}
+
 impl Token {
-    pub(super) fn new(
+    pub fn new(
         type_: TokenType,
         start_location: file::Location,
         end_location: file::Location,
@@ -292,6 +298,8 @@ pub enum Keyword {
     Return,    // return
     Continue,  // continue
     Break,     // break
+    True,      // true
+    False,     // false
 }
 
 impl TryFrom<&str> for Keyword {
@@ -329,6 +337,8 @@ impl TryFrom<&str> for Keyword {
             "return" => Keyword::Return,
             "continue" => Keyword::Continue,
             "break" => Keyword::Break,
+            "true" => Keyword::True,
+            "false" => Keyword::False,
             _ => return Err(()),
         })
     }
@@ -366,6 +376,8 @@ impl ToString for Keyword {
             Keyword::Return => "return",
             Keyword::Continue => "continue",
             Keyword::Break => "break",
+            Keyword::True => "true",
+            Keyword::False => "false",
         }
         .to_string()
     }
@@ -391,6 +403,8 @@ pub enum Symbol {
     GrabbyPipe,     // |>
     And,            // &&
     Or,             // ||
+    BitAnd,         // ^&
+    BitOr,          // ^|
     DebugPrint,     // ___
 }
 
@@ -414,6 +428,8 @@ impl TryFrom<&str> for Symbol {
             "|>" => Symbol::GrabbyPipe,
             "&&" => Symbol::And,
             "||" => Symbol::Or,
+            "^&" => Symbol::BitAnd,
+            "^|" => Symbol::BitOr,
             "___" => Symbol::DebugPrint,
             _ => return Err(()),
         })
@@ -438,6 +454,8 @@ impl ToString for Symbol {
             Symbol::GrabbyPipe => "|>",
             Symbol::And => "&&",
             Symbol::Or => "||",
+            Symbol::BitAnd => "^&",
+            Symbol::BitOr => "^|",
             Symbol::DebugPrint => "___",
         }
         .to_string()

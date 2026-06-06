@@ -834,7 +834,9 @@ fn include_middle(first: &Token, second: &Token, third: &Token) -> bool {
         (Newline, Newline, _) => false,
         (_, Newline, EndOfFile) => false,
         (_, Newline, WordSeparator(separator)) => match separator {
-            super::token::WordSeparator::RightBrace => true,
+            // The left parenthetical can be a start of an expression, so we
+            // shouldn't remove the newline in front of it
+            super::token::WordSeparator::LeftParen => true,
             _ => false,
         },
         (WordSeparator(separator), Newline, _) => match separator {

@@ -41,27 +41,3 @@ pub enum BinaryArithmetic {
     And,
     Or,
 }
-
-impl TryFrom<&WordSeparator> for Unary {
-    type Error = ();
-
-    fn try_from(separator: &WordSeparator) -> Result<Self, Self::Error> {
-        Ok(match separator {
-            WordSeparator::Minus => Self::Negate,
-            WordSeparator::Exclamation => Self::Not,
-            WordSeparator::Star => Self::Dereference,
-            _ => return Err(()),
-        })
-    }
-}
-
-impl TryFrom<&Keyword> for Unary {
-    type Error = ();
-
-    fn try_from(keyword: &Keyword) -> Result<Self, Self::Error> {
-        Ok(match keyword {
-            Keyword::Not => Self::Not,
-            _ => return Err(()),
-        })
-    }
-}

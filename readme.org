@@ -1,4 +1,4 @@
-* Syntax
+* COMMENT Syntax
 ** Variable
    =new <name> [: <type>] = <expr>=
 ** Custom types
@@ -101,3 +101,130 @@
       | pipe2 args args args ___ ?? Failed pipe 2 // Will print the error or the value
       | pipe3 ?? Failed pipe 3 ___                // Will NOT print, but return an error with '___' in it
     #+end_src
+* Syntax
+** Variables
+   SnakeCase, even when exported.
+
+   Declaration:
+   =new name = Expr= or =new name: Type = Expr=
+   with multiple:
+   =new name1, name2 = Expr= or =new name1: Type, name2: Type ...= or =new name1 name2: Type = ...=
+
+   Reassignment:
+   =old name = Expr=
+   with multiple:
+   =old name1, name2 = Expr=
+
+   Mixed declaration and reassignment:
+   =new newName1, newName2, old oldName = Expr=
+
+   Field editing:
+   =set name.field = Expr=
+** Data Types
+   CamelCase.
+*** Simple
+   Aliases: =alias NewType OldType=
+   The =NewType= is identical in every way, it's an /alias/.
+
+   Simple new types: =type NewType OldType=
+   The =NewType= has the same structure and functions, but you may define new functions for it.
+*** Enums
+    #+begin_src text
+      enum NewEnum {
+      	Variant1
+      	Variant2(InnerType)
+      	Variant3 { field1: Type, field2: Type}
+      }
+    #+end_src
+*** Structs
+    #+begin_src text
+      struct NewStruct {
+      	field1: Type
+      	field2: Type
+      }
+    #+end_src
+*** TODO Data
+*** Generics
+    Generics all have a scope. If a function uses generics, those generics exist
+    only within that function. Pretty obvious. The first use of a generic looks
+    like =#A= which says "I'm using an unconstrained generic type =A=.
+    Subsequently, you can just use =A= in the same function.
+
+    Example:
+    #+begin_src text
+      // Defining a function which takes two arguments and makes a list of them.
+      // The arguments are both of the same (generic) type.
+      someFunc := a: #A, b: A -> ...A = [a, b]
+    #+end_src
+*** Type Constraints
+    A type may be constrained by some generic type.
+    #+begin_src text
+      struct NewType<A> {
+      	field: A,
+      }
+    #+end_src
+
+    In type definitions, you don't need to add the =#= in front of =A= because
+    it's assumed that =A= is /always/ a generic. When using the type later, you
+    /do/ need the =#=. This is to avoid the compiler figuring out whether this
+    instance of =NewType= is constrained by a generic type called =A= and some
+    real type defined elsewhere that happens to also be called =A=.
+
+    #+begin_src text
+      type B string
+
+      someFunc := arg1: NewType<#A>, arg2: NewType<A>, arg3: NewType<B> ...
+    #+end_src
+
+    This declares a generic type =A=, constraints =arg1= and =arg2= by it, but
+    =arg3= is constraint by a real type =B=.
+*** Classes
+    A generic type may be limited to a class of types, i.e., to an interface.
+    Just saying =#A= means /any type/. If instead we need /any numeric type/, we
+    need to declare =A= to belong to a class:
+
+    #+begin_src text
+      interface Adder {
+      	// This is a pipe definition that adds the base (me, which is the Adder implementation) and the argument:
+      	add | other: Implement -> int
+      }
+
+
+      // Let's leave the Adder implementation aside for now.
+
+      addThree [A :: Adder] := a b c: A -> int = // function body
+    #+end_src
+
+    Here we're defining a type class =A= which implements =Adder=. In this case
+    it's redundant because you could just write =a b c: Adder=. But when doing a
+    type constraint, this is useful:
+
+    #+begin_src text
+      append [A :: Adder] := list: List<A>, newVal: A = // function body
+    #+end_src
+** Procedures
+*** Functions
+    Multiline:
+    #+begin_src text
+      functionName := argument1: Type1, argument2 argument3: Type2 -> ReturnType
+      	procedure
+      	(return) value
+      $$$
+    #+end_src
+
+    Oneline:
+    #+begin_src text
+      funcName := arg1: Type -> ReturnType = Expr
+    #+end_src
+
+    In this oneline example, the function may or may not return something.
+    Functions which return nothing implicitly return the =void= type. If =Expr=
+    returns the expected type, that's taken to be the return value. If the
+    function returns =void= but =Expr= evaluates to some other type, the =Expr=
+    value is /not/ returned.
+
+    Functions have a type; the above would be =funcName: (Type) >> ReturnType=.
+*** TODO Pipes
+*** TODO Closures
+** TODO Interfaces
+** TODO Package (export) management

@@ -1,0 +1,82 @@
+// Built-in functions:
+
+(maybe #T) | getor := elser: Embedded -> T {
+	if me | isVoid { elser | call }
+	me | forceSome
+}
+
+if := cond: into bool, do: Embedded -> T
+
+// Linked list
+struct LinkedList<#Data> {
+	data: Data
+	next: maybe ptr LinkedList<Data>,
+}
+
+newListNode := data: #Data -> LinkedList<Data>
+	LinkedList { data, next: void }
+$$$
+
+(LinkedList<#Data>) | append := data: Data -> Self
+	(me | last).next = newListNode $ data
+	return me
+$$$
+
+(LinkedList<#Data>) | prepend := data: Data -> LinkedList<Data>
+	new node: LinkedList = newListNode $ data
+	node.next = &me
+	node
+$$$
+
+(LinkedList<#Data>) | find := pred: (ref Data) >> bool -> maybe mut Data
+	for node in me | iter {
+		if pred $ node { return node }
+	}
+	return void
+$$$
+
+// These will be built-in, but look roughly like this:
+//
+// type Error = failing void
+// error     := msg: into string -> Embedded = return Failure{ msg }
+// success   :=                  -> Embedded = return void
+
+(LinkedList<#Data>) | addAfter := newVal: Data, after: (ref Data) >> bool -> Error {
+	new found = me | find after | getor { error $ "No node found" }
+	new newVal = newListNode $ newVal
+	set newVal.next = found.next
+	set found.next = *newVal
+	success
+}
+
+(LinkedList<#Data>) | addBefore := newVal: Data, before: (ref Data) >> bool -> Error {
+	let found = for node in me | iter {
+		new next = node.next | getor { error $ "No node found" }
+		if pred $ next { break node }
+	} | getor { error $ "No node found" }
+
+	new newVal = newListNode $ newVal
+	set newVal.next = found.next
+	set found.next = *newVal
+
+	success
+}
+
+(LinkedList<#Data>) | iter := -> LinkedListIterator<Data> = Return { first: *me, lastGiven: void }
+
+struct LinkedListIterator<#Data> {
+	first: maybe ptr LinkedList<Data>,
+	lastGiven: maybe ptr LinkedList<Data>,
+}
+
+impl Iterator<mut #Data>:
+(LinkedListIterator<Data>) | next := -> maybe mut Data
+	if me.lastGiven | exists {
+		new nextGiven = (me.lastGiven | inner).next | getor return void
+		me.lastGiven = nextGiven
+		return nextGiven
+	}
+
+	me.lastGiven = me.first | getor return void
+	return me.lastGiven
+$$$

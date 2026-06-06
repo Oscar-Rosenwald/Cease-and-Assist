@@ -19,22 +19,22 @@ terminators which are not always so simple to express.
   - NAME: Name of a named expression (e.g. variable, function, ...)
 * [0/3] Expression
   #+begin_example
-  expression -> LITERAL | maths_expression | application | definition | block | exit | builtin
+  expression ::= LITERAL | maths_expression | application | definition | block | exit | builtin
   #+end_example
 ** Maths
    Expressions which evaluate to some mathematical value, either of the =BOOL= or
    =NUMBER= literal class.
 
    #+begin_example
-     maths_expression    -> equality
-     equality            -> logic ( ('==' | '!=') logic )?
-     logic               -> comparison ( ('&&' | '||' | 'and' | 'or' | 'xor' | 'nand') comparison)?
-     comparison          -> sum ( ('<' | '<=' | '>' | '>=') sum )?
-     sum                 -> product ( ('+' | '-') product )*
-     product             -> binary_arithmetic ( ('*' | '/') binary_arithmetic )*
-     binary_arithmetic   -> unary ( ('&' | '|') unary )*
-     unary               -> ('!' | '-')* number_primary
-     number_primary      -> NUMBER | BOOL | '(' expression ')' | application | block
+     maths_expression    ::= equality
+     equality            ::= logic ( ('==' | '!=') logic )?
+     logic               ::= comparison ( ('&&' | '||' | 'and' | 'or' | 'xor' | 'nand') comparison)?
+     comparison          ::= sum ( ('<' | '<=' | '>' | '>=') sum )?
+     sum                 ::= product ( ('+' | '-') product )*
+     product             ::= binary_arithmetic ( ('*' | '/') binary_arithmetic )*
+     binary_arithmetic   ::= unary ( ('^&' | '^|') unary )?
+     unary               ::= ('!' | '-')? base
+     base                ::= NUMBER | BOOL | '(' expression ')' | application | block
    #+end_example
 ** TODO Application
    Function or pipe application evaluated to singular values. Contains any
@@ -48,13 +48,13 @@ terminators which are not always so simple to express.
    Keywords which exit the current block with a value.
 
    #+begin_example
-   exit -> ( 'return' | 'break' | 'continue' ) expression
+   exit ::= ( 'return' | 'break' | 'continue' ) expression
    #+end_example
 ** Builtin
    Built-in command for easy life.
 
    #+begin_example
-   builtin -> ( 'unlock' | 'rlock' | 'wlock' ) LITERAL
+   builtin ::= ( 'unlock' | 'rlock' | 'wlock' ) LITERAL
    #+end_example
 * TODO Statements
 * TODO Abstract Syntax Tree (AST)
