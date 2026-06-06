@@ -11,7 +11,7 @@ pub struct Tree {
 impl Tree {
     pub fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<Self> {
         let root = Rc::new(RefCell::new(Node::new_root()));
-        let tree = Node::parse_subtree(root.clone(), tokens)?;
+        let tree = Node::parse_subtree(root.clone(), tokens);
 
         {
             let mut root_mut = root.borrow_mut();
@@ -41,7 +41,7 @@ impl Node {
     fn parse_subtree(
         parent: Rc<RefCell<Node>>,
         mut tokens: VecDeque<Token>,
-    ) -> AstResult<Vec<Rc<RefCell<Node>>>> {
+    ) -> Vec<Rc<RefCell<Node>>> {
         let mut nodes_ret = Vec::new();
 
         loop {
@@ -54,7 +54,7 @@ impl Node {
             });
 
             if tokens.is_empty() {
-                return Ok(nodes_ret);
+                return nodes_ret;
             }
 
             let (node_kind, other_tokens) = match Expression::parse_tokens(tokens) {
@@ -82,7 +82,7 @@ impl Node {
             nodes_ret.push(Rc::new(RefCell::new(node)));
 
             if other_tokens.is_empty() {
-                return Ok(nodes_ret);
+                return nodes_ret;
             }
 
             tokens = other_tokens;
@@ -244,7 +244,7 @@ mod test {
             .collect();
 
         let root = Rc::new(RefCell::new(Node::new_root()));
-        let actual = Node::parse_subtree(root.clone(), line).unwrap();
+        let actual = Node::parse_subtree(root.clone(), line);
 
         let expected = Node {
             kind: NodeKind::Expression {
