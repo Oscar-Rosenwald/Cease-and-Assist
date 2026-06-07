@@ -13,7 +13,7 @@ where
 
     fn start(&self) -> Location;
 
-    fn end(&self) -> Option<Location>;
+    fn end(&self) -> Location;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -28,7 +28,28 @@ pub enum Literal {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Expression {
-    Calculation(Equality),
+    Calculation(PipeCall),
+}
+
+/// The application of a pipeline following either the `|` or `|>` symbols.
+#[derive(Debug, PartialEq, Eq)]
+pub struct PipeApplication {
+    /// Which symbol was used for the pipe? (`|` or `|>`)
+    pub kind: PipeKind,
+    /// Name of the pipe. Maybe be a value returned from a function call (which
+    /// can be a nested pipe call if you really want to).
+    pub name: FunctionCall,
+    /// Anything following the pipe `name` until the newline character (in the
+    /// token list - in code there may be lots of other newlines as well) or one
+    /// of the terminating symbols, which include another pipe, some brackets,
+    /// and a bunch of other shit.
+    pub arguments: Vec<FunctionCall>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct PipeCall {
+    pub base: Equality,
+    pub rest: Vec<PipeApplication>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -70,8 +91,31 @@ pub struct BinaryArithmetic {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Unary {
     pub operation: Option<operation::Unary>,
-    pub base: Base,
+    pub base: FunctionCall,
     pub(super) start_location: Location,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct FunctionArgument {
+    pub arguments: Vec<Expression>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct FunctionCall {
+    pub base: Base,
+    /// This field denotes that [`Self::base`] is a name of a function to call.
+    /// It may be empty (i.e., an empty vector) means no function application is
+    /// happening. The value is a vector because we want to allow things like
+    /// this:
+    ///
+    /// ```rust
+    /// someFunc()(arg1)(arg2, arg3)
+    /// ```
+    pub calls: Vec<FunctionArgument>,
+    /// The end of the function call, i.e., the position of the last closing
+    /// parenthesis if one exists, or the [`Self::base`]'s end position
+    /// otherwise.
+    pub(super) end_location: Location,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -109,8 +153,8 @@ impl ToString for Expression {
 
 impl Expression {
     pub(super) fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
-        let (calculation, tokens) = Equality::parse_tokens(tokens)?;
-        return Ok((Self::Calculation(calculation), tokens));
+        let (pipe_call, tokens) = PipeCall::parse_tokens(tokens)?;
+        return Ok((Self::Calculation(pipe_call), tokens));
     }
 
     pub(super) fn location(&self) -> FileLocation {
@@ -120,6 +164,195 @@ impl Expression {
                 end_location: calculation.end(),
             },
         }
+    }
+}
+
+impl ToString for PipeCall {
+    fn to_string(&self) -> String {
+        let mut base = self.base.to_string();
+
+        for application in &self.rest {
+            let pipe_name = application.name.to_string();
+            let pipe_args = application
+                .arguments
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            base = match application.kind {
+                PipeKind::Chill => format!("{base} | {pipe_name} {pipe_args}"),
+                PipeKind::Grabby => format!("{base} |> {pipe_name} {pipe_args}"),
+            };
+        }
+
+        return base;
+    }
+}
+
+impl PipeCall {
+    /// Reports whether the token denotes an end to a pipe application sequence.
+    /// A pipe application ends when the file reaches the end, when a newline is
+    /// found, or when a specific symbol is found (e.g. `;` or `{`).
+    fn next_ends_pipe(token: &Token) -> bool {
+        match token.type_ {
+            TokenType::Newline | TokenType::EndOfFile => true,
+            TokenType::WordSeparator(ref separator) => {
+                use WordSeparator::*;
+                match separator {
+                    LeftBrace | RightBrace | RightParen | Comma | Semicolon => true,
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns a valid [`PipeKind`] if `token` is a symbol which starts a new
+    /// pipe application, i.e., `|` or `|>`.
+    fn next_is_pipe(token: &Token) -> Option<PipeKind> {
+        match token.type_ {
+            TokenType::WordSeparator(ref separator) => match separator {
+                WordSeparator::Bar => Some(PipeKind::Chill),
+                _ => None,
+            },
+            TokenType::Symbol(ref symbol) => match symbol {
+                Symbol::GrabbyPipe => Some(PipeKind::Grabby),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Reads tokens until the pipe ends (returns `None` as the middle return
+    /// value) or a new pipe application is started (returns a valid
+    /// [`PipeKind`] instead).
+    fn read_next_pipe(
+        tokens: VecDeque<Token>,
+        pipe_kind: PipeKind,
+    ) -> SyntaxResult<(PipeApplication, Option<PipeKind>, VecDeque<Token>)> {
+        let (pipe_name, mut tokens) = FunctionCall::parse_tokens(tokens)?;
+
+        let mut pipe_arguments = Vec::new();
+
+        loop {
+            let next_token = match tokens.get(0) {
+                None => {
+                    let ret = PipeApplication {
+                        name: pipe_name,
+                        arguments: pipe_arguments,
+                        kind: pipe_kind,
+                    };
+                    return Ok((ret, None, tokens));
+                }
+                Some(token) => token,
+            };
+
+            if Self::next_ends_pipe(next_token) {
+                let ret = PipeApplication {
+                    name: pipe_name,
+                    arguments: pipe_arguments,
+                    kind: pipe_kind,
+                };
+                return Ok((ret, None, tokens));
+            }
+
+            match Self::next_is_pipe(next_token) {
+                None => {}
+                Some(new_pipe_kind) => {
+                    let ret = PipeApplication {
+                        name: pipe_name,
+                        arguments: pipe_arguments,
+                        kind: pipe_kind,
+                    };
+                    return Ok((ret, Some(new_pipe_kind), tokens));
+                }
+            }
+
+            let (pipe_arg, remaining_tokens) = FunctionCall::parse_tokens(tokens)?;
+            tokens = remaining_tokens;
+            pipe_arguments.push(pipe_arg);
+        }
+    }
+
+    /// Reads tokens until pipe applications end. There may be multiple pipe
+    /// applications in a row (e.g. `a | pipe1 b |> pipe2 func1() | func2() c`).
+    /// (Note that in this example, `func2` returns a pipe.)
+    fn parse_pipes(
+        mut tokens: VecDeque<Token>,
+    ) -> SyntaxResult<(Vec<PipeApplication>, VecDeque<Token>)> {
+        let mut ret_pipe_calls = Vec::new();
+
+        let mut pipe_kind = match tokens.get(0) {
+            None => return Ok((ret_pipe_calls, tokens)),
+            Some(token) => match Self::next_is_pipe(token) {
+                None => return Ok((ret_pipe_calls, tokens)),
+                Some(kind) => {
+                    tokens.pop_front(); // Pop the | or |> token
+                    kind
+                }
+            },
+        };
+
+        loop {
+            let next_token = match tokens.get(0) {
+                None => return Ok((ret_pipe_calls, tokens)),
+                Some(token) => token,
+            };
+
+            if Self::next_ends_pipe(next_token) {
+                return Ok((ret_pipe_calls, tokens));
+            }
+
+            let (pipe_call, next_pipe_kind, remaining_tokens) =
+                Self::read_next_pipe(tokens, pipe_kind)?;
+
+            tokens = remaining_tokens;
+            ret_pipe_calls.push(pipe_call);
+
+            match next_pipe_kind {
+                None => return Ok((ret_pipe_calls, tokens)),
+                Some(kind) => {
+                    tokens.pop_front(); // Pop the | or |> token
+                    pipe_kind = kind;
+                }
+            }
+        }
+    }
+}
+
+impl ExpressionTrait for PipeCall {
+    fn start(&self) -> Location {
+        self.base.start()
+    }
+
+    fn end(&self) -> Location {
+        self.rest
+            .last()
+            .map(|x| {
+                x.arguments
+                    .last()
+                    .map(|x| x.end())
+                    .unwrap_or_else(|| x.name.end())
+            })
+            .unwrap_or_else(|| self.base.end())
+    }
+
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Expression::Calculation(self)
+    }
+
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
+        let (base, tokens) = Equality::parse_tokens(tokens)?;
+        let (pipe_calls, tokens) = Self::parse_pipes(tokens)?;
+
+        let me = Self {
+            base,
+            rest: pipe_calls,
+        };
+
+        return Ok((me, tokens));
     }
 }
 
@@ -141,14 +374,18 @@ impl ToString for Equality {
 impl ExpressionTrait for Equality {
     #[cfg(test)]
     fn to_expression(self) -> Expression {
-        Expression::Calculation(self)
+        PipeCall {
+            base: self,
+            rest: vec![],
+        }
+        .to_expression()
     }
 
     fn start(&self) -> Location {
         self.base.start()
     }
 
-    fn end(&self) -> Option<Location> {
+    fn end(&self) -> Location {
         match self.rest.iter().last() {
             None => self.base.end(),
             Some(last) => last.1.end(),
@@ -220,7 +457,7 @@ impl ExpressionTrait for Logic {
         self.base.start()
     }
 
-    fn end(&self) -> Option<Location> {
+    fn end(&self) -> Location {
         match self.rest.iter().last() {
             None => self.base.end(),
             Some(last) => last.1.end(),
@@ -300,7 +537,7 @@ impl ExpressionTrait for Comparison {
         self.base.start()
     }
 
-    fn end(&self) -> Option<Location> {
+    fn end(&self) -> Location {
         match self.rest.iter().last() {
             None => self.base.end(),
             Some(last) => last.1.end(),
@@ -375,7 +612,7 @@ impl ExpressionTrait for Sum {
         self.base.start()
     }
 
-    fn end(&self) -> Option<Location> {
+    fn end(&self) -> Location {
         match self.rest.iter().last() {
             None => self.base.end(),
             Some(last) => last.1.end(),
@@ -446,7 +683,7 @@ impl ExpressionTrait for Product {
         self.base.start()
     }
 
-    fn end(&self) -> Option<Location> {
+    fn end(&self) -> Location {
         match self.rest.iter().last() {
             None => self.base.end(),
             Some(last) => last.1.end(),
@@ -515,7 +752,7 @@ impl ExpressionTrait for BinaryArithmetic {
         self.base.start()
     }
 
-    fn end(&self) -> Option<Location> {
+    fn end(&self) -> Location {
         match self.rest.iter().last() {
             None => self.base.end(),
             Some(last) => last.1.end(),
@@ -583,7 +820,7 @@ impl ExpressionTrait for Unary {
         self.start_location.clone()
     }
 
-    fn end(&self) -> Option<Location> {
+    fn end(&self) -> Location {
         self.base.end()
     }
 
@@ -619,7 +856,7 @@ impl ExpressionTrait for Unary {
             tokens.pop_front();
         }
 
-        let (base, tokens) = Base::parse_tokens(tokens)?;
+        let (base, tokens) = FunctionCall::parse_tokens(tokens)?;
 
         let unary = Unary {
             start_location: start_location.unwrap_or_else(|| base.start()),
@@ -628,6 +865,102 @@ impl ExpressionTrait for Unary {
         };
 
         return Ok((unary, tokens));
+    }
+}
+
+impl ToString for FunctionCall {
+    fn to_string(&self) -> String {
+        let mut base = self.base.to_string();
+
+        for call in &self.calls {
+            let mut arguments = Vec::new();
+
+            for argument in &call.arguments {
+                arguments.push(argument.to_string());
+            }
+
+            base = format!("{base}({})", arguments.join(", "));
+        }
+
+        return base;
+    }
+}
+
+impl ExpressionTrait for FunctionCall {
+    fn start(&self) -> Location {
+        self.base.start()
+    }
+
+    fn end(&self) -> Location {
+        self.end_location.clone()
+    }
+
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Unary {
+            start_location: self.start(),
+            base: self,
+            operation: None,
+        }
+        .to_expression()
+    }
+
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
+        let (base, mut tokens) = Base::parse_tokens(tokens)?;
+        let mut end_location = base.end();
+        let mut function_calls = Vec::new();
+
+        while !tokens.is_empty() {
+            let next_token = tokens.pop_front().unwrap();
+            let TokenType::WordSeparator(ref separator) = next_token.type_ else {
+                tokens.push_front(next_token);
+                break;
+            };
+            let WordSeparator::LeftParen = separator else {
+                tokens.push_front(next_token);
+                break;
+            };
+
+            let mut arguments = Vec::new();
+
+            loop {
+                let next_token = match tokens.pop_front() {
+                    Some(token) => token,
+                    None => {
+                        return Err(SyntaxError::empty(
+                            "Unterminated function call",
+                            VecDeque::new(),
+                        ));
+                    }
+                };
+
+                if let TokenType::WordSeparator(ref separator) = next_token.type_ {
+                    if let WordSeparator::Comma = separator {
+                        continue;
+                    }
+                    if let WordSeparator::RightParen = separator {
+                        end_location = next_token.end_location.clone();
+                        function_calls.push(FunctionArgument { arguments });
+                        break;
+                    }
+                }
+
+                // Return to token to the list so we can process it as part of the arguments.
+                tokens.push_front(next_token);
+
+                let (argument, remaining_tokens) = Expression::parse_tokens(tokens)?;
+                tokens = remaining_tokens;
+                arguments.push(argument);
+            }
+        }
+
+        let me = Self {
+            base,
+            calls: function_calls,
+            end_location,
+        };
+
+        return Ok((me, tokens));
     }
 }
 
@@ -731,10 +1064,10 @@ impl ToString for Base {
 impl ExpressionTrait for Base {
     #[cfg(test)]
     fn to_expression(self) -> Expression {
-        Unary {
-            start_location: self.location.start_location.clone(),
+        FunctionCall {
+            end_location: self.location.end_location.clone(),
+            calls: vec![],
             base: self,
-            operation: None,
         }
         .to_expression()
     }
@@ -743,7 +1076,7 @@ impl ExpressionTrait for Base {
         self.location.start_location.clone()
     }
 
-    fn end(&self) -> Option<Location> {
+    fn end(&self) -> Location {
         self.location.end_location.clone()
     }
 
@@ -813,7 +1146,7 @@ impl ExpressionTrait for Base {
             kind: base_kind,
             location: FileLocation {
                 start_location,
-                end_location: Some(end_location),
+                end_location,
             },
         };
 
@@ -830,7 +1163,7 @@ fn read_line(tokens: VecDeque<Token>) -> (Vec<Token>, VecDeque<Token>) {
 
     let line: Vec<Token> = token_iter
         .by_ref()
-        .take_while(|token| !token.type_.is_whitespace())
+        .take_while(|token| !token.type_.is_whitespace() && !token.type_.is_pipe())
         .collect();
 
     let rest: VecDeque<Token> = token_iter.collect();

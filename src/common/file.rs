@@ -5,18 +5,13 @@ use std::string::ToString;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub struct FileLocation {
     pub start_location: Location,
-    pub end_location: Option<Location>,
+    pub end_location: Location,
 }
 
 impl Display for FileLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let start = self.start_location.to_string();
-
-        let Some(ref end) = self.end_location else {
-            return write!(f, "{start}");
-        };
-
-        let end = end.to_string();
+        let end = self.end_location.to_string();
         write!(f, "{start} - {end}")
     }
 }
@@ -25,7 +20,7 @@ impl FileLocation {
     pub fn none() -> Self {
         Self {
             start_location: Location::None,
-            end_location: None,
+            end_location: Location::None,
         }
     }
 }
@@ -74,6 +69,15 @@ impl Location {
                 file_name: file_name.clone(),
                 line_number: line_number.clone(),
                 column_number,
+            },
+            Self::Position {
+                file_name,
+                line_number,
+                column_number: old_column,
+            } => Self::Position {
+                file_name: file_name.clone(),
+                line_number: line_number.clone(),
+                column_number: old_column + column_number,
             },
             other => other.clone(),
         }

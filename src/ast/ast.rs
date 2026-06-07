@@ -117,9 +117,10 @@ impl NodeKind {
                     || Location::None,
                     |child| child.borrow().kind.location().start_location.clone(),
                 ),
-                end_location: children
-                    .last()
-                    .map(|child| child.borrow().kind.location().end_location.unwrap().clone()),
+                end_location: children.last().map_or_else(
+                    || Location::None,
+                    |child| child.borrow().kind.location().end_location.clone(),
+                ),
             },
             Self::Expression {
                 expression,
@@ -134,7 +135,10 @@ impl NodeKind {
                 error_message: _,
                 failing_tokens,
             } => FileLocation {
-                end_location: failing_tokens.last().map(|x| x.end_location.clone()),
+                end_location: failing_tokens
+                    .last()
+                    .map(|x| x.end_location.clone())
+                    .unwrap_or_else(|| Location::None),
                 start_location: failing_tokens
                     .first()
                     .map(|x| x.start_location.clone())
@@ -219,7 +223,7 @@ mod test {
     fn location(start: Location, end: Location) -> FileLocation {
         FileLocation {
             start_location: start,
-            end_location: Some(end),
+            end_location: end,
         }
     }
 
@@ -286,9 +290,15 @@ mod test {
             location(loc!(1, 3), loc!(1, 4)),
         );
 
+        let function = FunctionCall {
+            base,
+            calls: vec![],
+            end_location: loc!(1, 4),
+        };
+
         let unary = expression::Unary {
             operation: Some(operation::Unary::Negative),
-            base,
+            base: function,
             start_location: loc!(1, 0),
         };
 
@@ -309,8 +319,13 @@ mod test {
             BaseKind::Literal(Literal::Bool(true)),
             location(loc!(1, 0), loc!(1, 3)),
         );
-        let unary1 = expression::Unary {
+        let func1 = FunctionCall {
             base: base1,
+            calls: vec![],
+            end_location: loc!(1, 3),
+        };
+        let unary1 = expression::Unary {
+            base: func1,
             operation: None,
             start_location: loc!(1, 0),
         };
@@ -319,8 +334,13 @@ mod test {
             BaseKind::Literal(Literal::Bool(false)),
             location(loc!(1, 12), loc!(1, 16)),
         );
-        let unary2 = expression::Unary {
+        let func2 = FunctionCall {
             base: base2,
+            calls: vec![],
+            end_location: loc!(1, 16),
+        };
+        let unary2 = expression::Unary {
+            base: func2,
             operation: Some(operation::Unary::Not),
             start_location: loc!(1, 9),
         };
@@ -484,12 +504,62 @@ mod test {
         test_expr!(full_expression(), expression::Logic, tokens);
     }
 
+    #[test]
+    fn function_calls() {
+        let tokens = tokens!(
+            [Literal(String::from("func1")), [1, 0], [1, 10]],
+            [WordSeparator(WordSeparator::LeftParen), [1, 0], [1, 10]],
+            [Literal(String::from("a")), [1, 0], [1, 10]],
+            [WordSeparator(WordSeparator::Comma), [1, 0], [1, 10]],
+            [Literal(String::from("b")), [1, 0], [1, 10]],
+            [WordSeparator(WordSeparator::RightParen), [1, 0], [1, 10]],
+            [WordSeparator(WordSeparator::LeftParen), [1, 0], [1, 10]],
+            [WordSeparator(WordSeparator::RightParen), [1, 0], [1, 10]],
+            [WordSeparator(WordSeparator::LeftParen), [1, 0], [1, 10]],
+            [Literal(String::from("c")), [1, 0], [1, 10]],
+            [WordSeparator(WordSeparator::RightParen), [1, 0], [1, 10]],
+        );
+
+        test_expr!(function_expression(), expression::FunctionCall, tokens);
+    }
+
+    #[test]
+    fn pipe_calls() {
+        let tokens = tokens!(
+            // line 1
+            [Literal(String::from("func1")), [1, 0], [1, 4]],
+            [WordSeparator(WordSeparator::LeftParen), [1, 5], [1, 5]],
+            [Literal(String::from("a")), [1, 6], [1, 6]],
+            [WordSeparator(WordSeparator::RightParen), [1, 7], [1, 7]],
+            // line 2
+            [WordSeparator(WordSeparator::Bar), [2, 0], [2, 0]],
+            [Literal(String::from("pipe1")), [2, 1], [2, 5]],
+            [Literal(String::from("b")), [2, 7], [2, 7]],
+            // line 3
+            [Symbol(Symbol::GrabbyPipe), [3, 0], [3, 0]],
+            [Literal(String::from("pipe2")), [3, 2], [3, 6]],
+            [Literal(String::from("func2")), [3, 8], [3, 12]],
+            [WordSeparator(WordSeparator::LeftParen), [3, 13], [3, 13]],
+            [Literal(String::from("ccc")), [3, 14], [3, 16]],
+            [WordSeparator(WordSeparator::RightParen), [3, 17], [3, 17]],
+            [Literal(String::from("d")), [3, 19], [3, 19]],
+        );
+
+        test_expr!(pipe_expression(), PipeCall, tokens);
+    }
+
     // -5
     fn minus_five() -> expression::Unary {
+        let function = FunctionCall {
+            base: number(5, location(loc!(1, 10), loc!(1, 10))),
+            calls: vec![],
+            end_location: loc!(1, 10),
+        };
+
         expression::Unary {
             operation: Some(operation::Unary::Negative),
             start_location: loc!(1, 9),
-            base: number(5, location(loc!(1, 10), loc!(1, 10))),
+            base: function,
         }
     }
 
@@ -555,12 +625,18 @@ mod test {
             BaseKind::Group(Box::new(eight_times_nine().to_expression())),
             FileLocation {
                 start_location: loc!(1, 17),
-                end_location: Some(loc!(1, 21)),
+                end_location: loc!(1, 21),
             },
         );
 
-        expression::Unary {
+        let function = FunctionCall {
             base: grouped,
+            calls: vec![],
+            end_location: loc!(1, 21),
+        };
+
+        expression::Unary {
+            base: function,
             operation: Some(operation::Unary::Negative),
             start_location: loc!(1, 16),
         }
@@ -615,10 +691,14 @@ mod test {
                         base: expression::Unary {
                             operation: None,
                             start_location: loc!(1, 24),
-                            base: Base::new(
-                                BaseKind::Literal(Literal::Bool(true)),
-                                location(loc!(1, 24), loc!(1, 24)),
-                            ),
+                            base: FunctionCall {
+                                calls: vec![],
+                                end_location: loc!(1, 24),
+                                base: Base::new(
+                                    BaseKind::Literal(Literal::Bool(true)),
+                                    location(loc!(1, 24), loc!(1, 24)),
+                                ),
+                            },
                         },
                     },
                 },
@@ -638,10 +718,14 @@ mod test {
                             base: expression::Unary {
                                 operation: None,
                                 start_location: loc!(1, 0),
-                                base: Base::new(
-                                    BaseKind::Group(Box::new(equality().to_expression())),
-                                    location(loc!(1, 0), loc!(1, 22)),
-                                ),
+                                base: FunctionCall {
+                                    calls: vec![],
+                                    end_location: loc!(1, 22),
+                                    base: Base::new(
+                                        BaseKind::Group(Box::new(equality().to_expression())),
+                                        location(loc!(1, 0), loc!(1, 22)),
+                                    ),
+                                },
                             },
                         },
                     },
@@ -650,20 +734,139 @@ mod test {
         }
     }
 
+    // func1(a, b)()(c)
+    fn function_expression() -> FunctionCall {
+        let (start, end) = (loc!(1, 0), loc!(1, 10));
+        let func_name = name("func1", start.clone(), end.clone());
+        let arg1 = name("a", start.clone(), end.clone());
+        let arg2 = name("b", start.clone(), end.clone());
+        let arg3 = name("c", start.clone(), end.clone());
+        let call1 = FunctionArgument {
+            arguments: vec![arg1.to_expression(), arg2.to_expression()],
+        };
+        let call2 = FunctionArgument { arguments: vec![] };
+        let call3 = FunctionArgument {
+            arguments: vec![arg3.to_expression()],
+        };
+        let calls = vec![call1, call2, call3];
+
+        FunctionCall {
+            base: func_name,
+            end_location: end,
+            calls,
+        }
+    }
+
+    // 11111111 222222222 333333333333333333333 = line number
+    // ----------------------------------------
+    //                     00000000001111111111 = column, first digit on line
+    // 01234567 0 12345 7 00 23456 8901234567 9 = column, second digit
+    // func1(a) | pipe1 b |> pipe2 func2(ccc) d
+    fn pipe_expression() -> PipeCall {
+        let func1 = function_call("func1", loc!(1, 0), loc!(1, 4), vec![vec![("a", 1, 6, 6)]]);
+        let func2 = function_call(
+            "func2",
+            loc!(3, 8),
+            loc!(3, 12),
+            vec![vec![("ccc", 3, 14, 16)]],
+        );
+
+        let pipe1 = pipe_call(
+            "pipe1",
+            PipeKind::Chill,
+            loc!(2, 1),
+            loc!(2, 5),
+            vec![FunctionCall {
+                base: name("b", loc!(2, 7), loc!(2, 7)),
+                calls: vec![],
+                end_location: loc!(2, 7),
+            }],
+        );
+
+        let pipe2 = pipe_call(
+            "pipe2",
+            PipeKind::Grabby,
+            loc!(3, 2),
+            loc!(3, 6),
+            vec![
+                func2,
+                FunctionCall {
+                    base: name("d", loc!(3, 19), loc!(3, 19)),
+                    calls: vec![],
+                    end_location: loc!(3, 19),
+                },
+            ],
+        );
+
+        let func1 = match func1.to_expression() {
+            Expression::Calculation(pipe) => pipe.base,
+        };
+
+        PipeCall {
+            base: func1,
+            rest: vec![pipe1, pipe2],
+        }
+    }
+
+    fn name(name: &str, start: Location, end: Location) -> Base {
+        Base::new(
+            BaseKind::Literal(Literal::Name(String::from(name))),
+            FileLocation {
+                start_location: start.clone(),
+                end_location: end.clone(),
+            },
+        )
+    }
+
     fn number(n: u32, location: FileLocation) -> Base {
         Base::new(BaseKind::Literal(Literal::WholeNumber(n)), location)
     }
 
+    fn function_call(
+        func_name: &str,
+        start: Location,
+        end: Location,
+        calls: Vec<Vec<(&str, usize, usize, usize)>>,
+    ) -> FunctionCall {
+        let mut end_location = end.clone();
+        let func_name = name(func_name, start, end);
+        let mut ret_calls = Vec::new();
+
+        for args in calls {
+            let mut arguments = Vec::new();
+
+            for (arg_name, line, start_col, end_col) in args {
+                end_location = loc!(line, end_col).add_column(1); // +1 because of the closing parenthesis
+                let arg = name(arg_name, loc!(line, start_col), loc!(line, end_col));
+                arguments.push(arg.to_expression());
+            }
+
+            ret_calls.push(FunctionArgument { arguments });
+        }
+
+        FunctionCall {
+            base: func_name,
+            end_location,
+            calls: ret_calls,
+        }
+    }
+
     fn unary(n: u32, location: Location) -> expression::Unary {
-        expression::Unary {
-            start_location: location.clone(),
+        let function = FunctionCall {
+            end_location: location.clone(),
             base: number(
                 n,
                 FileLocation {
                     start_location: location.clone(),
-                    end_location: Some(location),
+                    end_location: location.clone(),
                 },
             ),
+            calls: vec![],
+        };
+
+        expression::Unary {
+            start_location: location.clone(),
+            base: function,
             operation: None,
         }
     }
@@ -679,6 +882,26 @@ mod test {
         expression::Product {
             base: binary_arithmetic(n, location),
             rest: vec![],
+        }
+    }
+
+    fn pipe_call(
+        pipe_name: &str,
+        kind: PipeKind,
+        start: Location,
+        end: Location,
+        arguments: Vec<FunctionCall>,
+    ) -> PipeApplication {
+        let pipe_name = FunctionCall {
+            base: name(pipe_name, start, end.clone()),
+            calls: vec![],
+            end_location: end,
+        };
+
+        PipeApplication {
+            kind,
+            name: pipe_name,
+            arguments,
         }
     }
 }

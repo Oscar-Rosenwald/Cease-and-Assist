@@ -44,3 +44,9 @@ pub enum BinaryArithmetic {
     And,
     Or,
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PipeKind {
+    Grabby, // |>
+    Chill,  // |
+}

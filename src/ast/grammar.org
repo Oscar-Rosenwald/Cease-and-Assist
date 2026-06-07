@@ -18,32 +18,25 @@ terminators which are not always so simple to express.
   - NUMBER: Any of the number formats
   - NAME: Name of a named expression (e.g. variable, function, ...)
 * [0/3] Expression
-  #+begin_example
-  expression ::= LITERAL | maths_expression | application | definition | block | exit | builtin
-  #+end_example
-** Maths
-   Expressions which evaluate to some mathematical value, either of the =BOOL= or
-   =NUMBER= literal class.
+  Expressions which evaluate to some mathematical value, either of the =BOOL= or
+  =NUMBER= literal class.
 
-   #+begin_example
-     maths_expression    ::= equality
+  #+begin_example
+     expression          ::= pipeCall
+     pipeCall            ::= equality ( ('|' | '|>') functionCall functionCall* )* ( NEWLINE | EOF | '{' | '}' | ')' | ',' | ';' )
      equality            ::= logic ( ('==' | '!=') logic )?
      logic               ::= comparison ( ('&&' | '||' | 'and' | 'or' | 'xor' | 'nand') comparison)?
      comparison          ::= sum ( ('<' | '<=' | '>' | '>=') sum )?
      sum                 ::= product ( ('+' | '-') product )*
      product             ::= binary_arithmetic ( ('*' | '/') binary_arithmetic )*
      binary_arithmetic   ::= unary ( ('^&' | '^|') unary )?
-     unary               ::= ('!' | '-')? base
-     base                ::= NUMBER | BOOL | '(' expression ')' | application | block
-   #+end_example
-** TODO Application
-   Function or pipe application evaluated to singular values. Contains any
-   arguments passed therein, and type constraints which may be defined.
-** TODO Definition
-   Definitions of types, functions, pipes, implementations, variables,
-   constants, etc.
+     unary               ::= ('!' | '-')? functionCall
+     functionCall        ::= base ( '(' ( expression ( ',' expression )* )* ')' )*
+     base                ::= BOOL | STRING | CHAR | NUMBER | 'void' | NAME | '(' expression ')'
+  #+end_example
 ** TODO Block
-   Code blocks, standard programming paradigms like a for loop.
+   Code blocks, standard programming paradigms like a for loop, if, etc. There
+   are also expressions in Cease.
 ** Exit
    Keywords which exit the current block with a value.
 

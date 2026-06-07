@@ -132,6 +132,20 @@ impl TokenType {
             _ => false,
         }
     }
+
+    pub fn is_pipe(&self) -> bool {
+        match self {
+            TokenType::Symbol(symbol) => match symbol {
+                Symbol::GrabbyPipe => true,
+                _ => false,
+            },
+            TokenType::WordSeparator(separator) => match separator {
+                WordSeparator::Bar => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
 }
 
 impl ToString for Token {
