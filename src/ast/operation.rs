@@ -1,7 +1,7 @@
 #[derive(Debug, PartialEq, Eq)]
 pub enum Unary {
     Not,
-    Negate,
+    Negative,
     Dereference,
 }
 

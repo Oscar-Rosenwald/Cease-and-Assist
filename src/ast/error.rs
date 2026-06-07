@@ -1,29 +1,34 @@
-use crate::lexing::*;
+use super::*;
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fmt::Display;
+use std::rc::Rc;
+
+/// A `Result` wrapper for the [`SyntaxError`] type.
+pub type SyntaxResult<T> = Result<T, SyntaxError>;
 
 /// An error caused by parsing an invalid series of [`Token`]s into an
-/// expression. By "invalid" we mean the tokens do not conform to the syntax of
-/// the Cease language.
+/// expression or statement. By "invalid" we mean the tokens do not conform to
+/// the syntax of the Cease language.
 ///
 /// The error includes a message which describes the syntactic problem, a list
 /// of tokens which exhibit this problem, if one such can be constructed, and a
 /// list of tokens which are yet to be processed.
 ///
-/// Unlike most errors, AstError is meant to be included in the output of the
+/// Unlike most errors, SyntaxError is meant to be included in the output of the
 /// abstract syntax tree parser. The parser produces a tree where some nodes are
-/// of kind `AstError`. The other nodes can still be evaluated and some limited
-/// analysis can be run on them, and as long as that is the case, we don't need
-/// to block the whole operation just because one line is wrong.
+/// of kind [`NodeKind::Error`]. The other nodes can still be evaluated and some
+/// limited analysis can be run on them, and as long as that is the case, we
+/// don't need to block the whole operation just because one line is wrong.
 #[derive(Debug, PartialEq, Eq)]
-pub struct AstError {
-    pub message: String,
+pub struct SyntaxError {
+    pub(super) message: String,
     pub failing_tokens: Vec<Token>,
-    pub remaining_tokens: VecDeque<Token>,
+    pub(super) remaining_tokens: VecDeque<Token>,
 }
 
-impl AstError {
+impl SyntaxError {
     pub fn empty<S: ToString>(msg: S, remaining_tokens: VecDeque<Token>) -> Self {
         Self {
             message: msg.to_string(),
@@ -45,7 +50,7 @@ impl AstError {
     }
 }
 
-impl Display for AstError {
+impl Display for SyntaxError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -55,5 +60,23 @@ impl Display for AstError {
     }
 }
 
-/// A `Result` wrapper for the [`AstError`] type.
-pub type AstResult<T> = Result<T, AstError>;
+/// A `Result` wrapper for the [`TypeError`] type.
+pub type TypeResult<T> = Result<T, TypeError>;
+
+/// A `TypeError` is an error produced when the abstract syntax tree is
+/// evaluated. It describes a... let's see... an error with the expression
+/// types. Hmmmm. Who'd have guessed?
+#[derive(Debug, PartialEq, Eq)]
+pub struct TypeError {
+    message: String,
+    location: FileLocation,
+}
+
+impl TypeError {
+    pub fn new<S: ToString>(msg: S, location: FileLocation) -> Self {
+        Self {
+            message: msg.to_string(),
+            location,
+        }
+    }
+}

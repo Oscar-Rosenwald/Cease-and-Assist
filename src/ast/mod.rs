@@ -6,12 +6,15 @@ pub mod error;
 pub mod expression;
 pub mod operation;
 pub mod statement;
+pub mod types;
 
 pub use ast::*;
 pub use expression::*;
 pub use operation::*;
 pub use statement::*;
+pub use types::*;
 
 pub(super) use crate::common::file::*;
 pub(super) use crate::lexing::token::*;
 pub(super) use error::*;
+pub(super) use types::*;

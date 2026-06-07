@@ -4,9 +4,9 @@ use std::collections::VecDeque;
 
 pub trait ExpressionTrait
 where
-    Self: Sized,
+    Self: Sized + ToString,
 {
-    fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)>;
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)>;
 
     #[cfg(test)]
     fn to_expression(self) -> Expression;
@@ -86,8 +86,29 @@ pub enum BaseKind {
     Group(Box<Expression>),
 }
 
+impl ToString for Literal {
+    fn to_string(&self) -> String {
+        match self {
+            Literal::Bool(bool) => format!("{bool}"),
+            Literal::String(sentense) => format!(r#""{sentense}""#),
+            Literal::Char(char) => format!("{char}"),
+            Literal::Name(name) => format!("'{name}'"),
+            Literal::WholeNumber(number) => format!("{number}"),
+            Literal::FloatingNumber { base, rest } => format!("{base}.{rest}"),
+        }
+    }
+}
+
+impl ToString for Expression {
+    fn to_string(&self) -> String {
+        match self {
+            Expression::Calculation(calculation) => calculation.to_string(),
+        }
+    }
+}
+
 impl Expression {
-    pub(super) fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
+    pub(super) fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
         let (calculation, tokens) = Equality::parse_tokens(tokens)?;
         return Ok((Self::Calculation(calculation), tokens));
     }
@@ -98,6 +119,21 @@ impl Expression {
                 start_location: calculation.start(),
                 end_location: calculation.end(),
             },
+        }
+    }
+}
+
+impl ToString for Equality {
+    fn to_string(&self) -> String {
+        let base = self.base.to_string();
+
+        let Some((operation, logic)) = &self.rest else {
+            return base;
+        };
+
+        match operation {
+            operation::Equality::Equal => format!("{base} == {}", logic.to_string()),
+            operation::Equality::NotEqual => format!("{base} != {}", logic.to_string()),
         }
     }
 }
@@ -119,7 +155,7 @@ impl ExpressionTrait for Equality {
         }
     }
 
-    fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
         let (logic, mut tokens) = Logic::parse_tokens(tokens)?;
         let mut equality_ret = Self {
             base: logic,
@@ -153,6 +189,23 @@ impl ExpressionTrait for Equality {
     }
 }
 
+impl ToString for Logic {
+    fn to_string(&self) -> String {
+        let mut base = self.base.to_string();
+
+        for (operation, comparison) in &self.rest {
+            base = match operation {
+                operation::Logic::And => format!("{base} and {}", comparison.to_string()),
+                operation::Logic::Or => format!("{base} or {}", comparison.to_string()),
+                operation::Logic::Nand => format!("{base} nand {}", comparison.to_string()),
+                operation::Logic::Xor => format!("{base} xor {}", comparison.to_string()),
+            };
+        }
+
+        return base;
+    }
+}
+
 impl ExpressionTrait for Logic {
     #[cfg(test)]
     fn to_expression(self) -> Expression {
@@ -174,7 +227,7 @@ impl ExpressionTrait for Logic {
         }
     }
 
-    fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
         let (comparison, mut tokens) = Comparison::parse_tokens(tokens)?;
         let mut logic_ret = Self {
             base: comparison,
@@ -216,6 +269,23 @@ impl ExpressionTrait for Logic {
     }
 }
 
+impl ToString for Comparison {
+    fn to_string(&self) -> String {
+        let base = self.base.to_string();
+
+        let Some((operation, sum)) = &self.rest else {
+            return base;
+        };
+
+        match operation {
+            operation::Comparison::Less => format!("{base} < {}", sum.to_string()),
+            operation::Comparison::LessOrEqual => format!("{base} <= {}", sum.to_string()),
+            operation::Comparison::Greater => format!("{base} > {}", sum.to_string()),
+            operation::Comparison::GreaterOrEqual => format!("{base} >= {}", sum.to_string()),
+        }
+    }
+}
+
 impl ExpressionTrait for Comparison {
     #[cfg(test)]
     fn to_expression(self) -> Expression {
@@ -237,7 +307,7 @@ impl ExpressionTrait for Comparison {
         }
     }
 
-    fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
         let (sum, mut tokens) = Sum::parse_tokens(tokens)?;
         let mut comparison_ret = Self {
             base: sum,
@@ -276,6 +346,21 @@ impl ExpressionTrait for Comparison {
     }
 }
 
+impl ToString for Sum {
+    fn to_string(&self) -> String {
+        let mut base = self.base.to_string();
+
+        for (operation, product) in &self.rest {
+            base = match operation {
+                operation::Sum::Plus => format!("{base} + {}", product.to_string()),
+                operation::Sum::Minus => format!("{base} - {}", product.to_string()),
+            };
+        }
+
+        return base;
+    }
+}
+
 impl ExpressionTrait for Sum {
     #[cfg(test)]
     fn to_expression(self) -> Expression {
@@ -297,7 +382,7 @@ impl ExpressionTrait for Sum {
         }
     }
 
-    fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
         let (product, mut tokens) = Product::parse_tokens(tokens)?;
         let mut sum_ret = Self {
             base: product,
@@ -332,6 +417,21 @@ impl ExpressionTrait for Sum {
     }
 }
 
+impl ToString for Product {
+    fn to_string(&self) -> String {
+        let mut base = self.base.to_string();
+
+        for (operation, bin_arithmetic) in &self.rest {
+            base = match operation {
+                operation::Product::Multiply => format!("{base} * {}", bin_arithmetic.to_string()),
+                operation::Product::Divide => format!("{base} / {}", bin_arithmetic.to_string()),
+            };
+        }
+
+        return base;
+    }
+}
+
 impl ExpressionTrait for Product {
     #[cfg(test)]
     fn to_expression(self) -> Expression {
@@ -353,7 +453,7 @@ impl ExpressionTrait for Product {
         }
     }
 
-    fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
         let (binary_arithmetic, mut tokens) = BinaryArithmetic::parse_tokens(tokens)?;
         let mut product_ret = Product {
             base: binary_arithmetic,
@@ -388,6 +488,19 @@ impl ExpressionTrait for Product {
     }
 }
 
+impl ToString for BinaryArithmetic {
+    fn to_string(&self) -> String {
+        let base = self.base.to_string();
+        match &self.rest {
+            None => base,
+            Some((operation, unary)) => match operation {
+                operation::BinaryArithmetic::And => format!("{base} ^& {}", unary.to_string()),
+                operation::BinaryArithmetic::Or => format!("{base} ^| {}", unary.to_string()),
+            },
+        }
+    }
+}
+
 impl ExpressionTrait for BinaryArithmetic {
     #[cfg(test)]
     fn to_expression(self) -> Expression {
@@ -409,7 +522,7 @@ impl ExpressionTrait for BinaryArithmetic {
         }
     }
 
-    fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
         let (unary, mut tokens) = Unary::parse_tokens(tokens)?;
         let mut binary_ret = Self {
             base: unary,
@@ -443,6 +556,19 @@ impl ExpressionTrait for BinaryArithmetic {
     }
 }
 
+impl ToString for Unary {
+    fn to_string(&self) -> String {
+        match self.operation {
+            None => self.base.to_string(),
+            Some(ref operation) => match operation {
+                operation::Unary::Not => format!("!{}", self.base.to_string()),
+                operation::Unary::Negative => format!("-{}", self.base.to_string()),
+                operation::Unary::Dereference => format!("*{}", self.base.to_string()),
+            },
+        }
+    }
+}
+
 impl ExpressionTrait for Unary {
     #[cfg(test)]
     fn to_expression(self) -> Expression {
@@ -461,10 +587,10 @@ impl ExpressionTrait for Unary {
         self.base.end()
     }
 
-    fn parse_tokens(mut tokens: VecDeque<Token>) -> AstResult<(Unary, VecDeque<Token>)> {
+    fn parse_tokens(mut tokens: VecDeque<Token>) -> SyntaxResult<(Unary, VecDeque<Token>)> {
         let (unary_operation, start_location): (Option<operation::Unary>, Option<Location>) =
             match tokens.get(0) {
-                None => return Err(AstError::empty("Unexpected end of file", tokens)),
+                None => return Err(SyntaxError::empty("Unexpected end of file", tokens)),
                 Some(token) => match token.type_ {
                     TokenType::WordSeparator(ref separator) => match separator {
                         WordSeparator::Exclamation => (
@@ -472,7 +598,7 @@ impl ExpressionTrait for Unary {
                             Some(token.start_location.clone()),
                         ),
                         WordSeparator::Minus => (
-                            Some(operation::Unary::Negate),
+                            Some(operation::Unary::Negative),
                             Some(token.start_location.clone()),
                         ),
                         WordSeparator::Star => (
@@ -517,20 +643,23 @@ impl Base {
     /// an error.
     fn parse_grouped_expresssion(
         tokens: VecDeque<Token>,
-    ) -> AstResult<(Expression, VecDeque<Token>, Location)> {
+    ) -> SyntaxResult<(Expression, VecDeque<Token>, Location)> {
         let (inner_expression, mut remaining_tokens) = Expression::parse_tokens(tokens)?;
 
         let mut first_token = match remaining_tokens.pop_front() {
             Some(token) => token,
             None => {
-                return Err(AstError::empty("Unclosed parathentical", remaining_tokens));
+                return Err(SyntaxError::empty(
+                    "Unclosed parathentical",
+                    remaining_tokens,
+                ));
             }
         };
 
         let token_type = std::mem::take(&mut first_token.type_);
         let TokenType::WordSeparator(ref separator) = token_type else {
             first_token.type_ = token_type;
-            return Err(AstError::tokens(
+            return Err(SyntaxError::tokens(
                 "Expected closing parenthetical",
                 vec![first_token],
                 remaining_tokens,
@@ -539,7 +668,7 @@ impl Base {
 
         let WordSeparator::RightParen = separator else {
             first_token.type_ = token_type;
-            return Err(AstError::tokens(
+            return Err(SyntaxError::tokens(
                 "Expected closing parenthetical",
                 vec![first_token],
                 remaining_tokens,
@@ -561,7 +690,7 @@ impl Base {
         current_token: Token,
         separator: WordSeparator,
         tokens: VecDeque<Token>,
-    ) -> AstResult<(BaseKind, VecDeque<Token>, Location)> {
+    ) -> SyntaxResult<(BaseKind, VecDeque<Token>, Location)> {
         let WordSeparator::LeftParen = separator else {
             let mut offending_tokens = vec![Token::new(
                 TokenType::WordSeparator(separator),
@@ -572,7 +701,7 @@ impl Base {
             let (mut line, other_tokens) = read_line(tokens);
             offending_tokens.append(&mut line);
 
-            return Err(AstError::tokens(
+            return Err(SyntaxError::tokens(
                 "Unexpected word separator",
                 offending_tokens,
                 other_tokens,
@@ -587,6 +716,15 @@ impl Base {
             remaining_tokens,
             end_location,
         ));
+    }
+}
+
+impl ToString for Base {
+    fn to_string(&self) -> String {
+        match &self.kind {
+            BaseKind::Literal(literal) => literal.to_string(),
+            BaseKind::Group(group) => format!("({})", group.to_string()),
+        }
     }
 }
 
@@ -609,9 +747,9 @@ impl ExpressionTrait for Base {
         self.location.end_location.clone()
     }
 
-    fn parse_tokens(mut tokens: VecDeque<Token>) -> AstResult<(Self, VecDeque<Token>)> {
+    fn parse_tokens(mut tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
         let mut first_token = match tokens.pop_front() {
-            None => return Err(AstError::empty("Unexpected end of file", tokens)),
+            None => return Err(SyntaxError::empty("Unexpected end of file", tokens)),
             Some(token) => token,
         };
 
@@ -620,15 +758,23 @@ impl ExpressionTrait for Base {
         let token_type = std::mem::take(&mut first_token.type_);
 
         let base_kind = match token_type {
-            TokenType::Newline => return Err(AstError::tokens("Unexpected end of line", vec![first_token], tokens)),
+            TokenType::Newline => {
+                return Err(SyntaxError::tokens(
+                    "Unexpected end of line",
+                    vec![first_token],
+                    tokens,
+                ));
+            }
             TokenType::EndOfFile => {
-                return Err(AstError::empty("Unexpected end of file", tokens));
+                return Err(SyntaxError::empty("Unexpected end of file", tokens));
             }
             TokenType::Documentation(_) => {
                 first_token.type_ = token_type;
-                return Err(
-                    AstError::tokens("Unexpected documentation block", vec![first_token], tokens),
-                );
+                return Err(SyntaxError::tokens(
+                    "Unexpected documentation block",
+                    vec![first_token],
+                    tokens,
+                ));
             }
             TokenType::Symbol(_) => {
                 first_token.type_ = token_type;
@@ -636,7 +782,7 @@ impl ExpressionTrait for Base {
                 let (mut line, other_tokens) = read_line(tokens);
                 offending_tokens.append(&mut line);
 
-                return Err(AstError::tokens(
+                return Err(SyntaxError::tokens(
                     "Unexpected symbol",
                     offending_tokens,
                     other_tokens,

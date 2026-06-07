@@ -9,7 +9,7 @@ pub struct Tree {
 }
 
 impl Tree {
-    pub fn parse_tokens(tokens: VecDeque<Token>) -> AstResult<Self> {
+    pub fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<Self> {
         let root = Rc::new(RefCell::new(Node::new_root()));
         let tree = Node::parse_subtree(root.clone(), tokens);
 
@@ -287,7 +287,7 @@ mod test {
         );
 
         let unary = expression::Unary {
-            operation: Some(operation::Unary::Negate),
+            operation: Some(operation::Unary::Negative),
             base,
             start_location: loc!(1, 0),
         };
@@ -487,7 +487,7 @@ mod test {
     // -5
     fn minus_five() -> expression::Unary {
         expression::Unary {
-            operation: Some(operation::Unary::Negate),
+            operation: Some(operation::Unary::Negative),
             start_location: loc!(1, 9),
             base: number(5, location(loc!(1, 10), loc!(1, 10))),
         }
@@ -561,7 +561,7 @@ mod test {
 
         expression::Unary {
             base: grouped,
-            operation: Some(operation::Unary::Negate),
+            operation: Some(operation::Unary::Negative),
             start_location: loc!(1, 16),
         }
     }

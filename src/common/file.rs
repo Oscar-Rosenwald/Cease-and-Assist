@@ -8,16 +8,25 @@ pub struct FileLocation {
     pub end_location: Option<Location>,
 }
 
+impl Display for FileLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let start = self.start_location.to_string();
+
+        let Some(ref end) = self.end_location else {
+            return write!(f, "{start}");
+        };
+
+        let end = end.to_string();
+        write!(f, "{start} - {end}")
+    }
+}
+
 impl FileLocation {
     pub fn none() -> Self {
         Self {
             start_location: Location::None,
             end_location: None,
         }
-    }
-
-    pub fn get_file_name(&self) -> String {
-        self.start_location.get_file_name()
     }
 }
 
