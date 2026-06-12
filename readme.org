@@ -1,7 +1,7 @@
 * COMMENT Syntax
 ** Variable
    =new <name> [: <type>] = <expr>=
-** Custom types
+** Custom Types
 *** Enum
    #+begin_src 
    enum[generics] <name>[generics] {
@@ -103,39 +103,56 @@
     #+end_src
 * Syntax
 ** Variables
-   SnakeCase, even when exported.
+   snakeCase, even when exported.
+*** Stack
+    Declaration:
+    =new name = Expr= or =new name: Type = Expr=
+    with multiple:
+    =new name1, name2 = Expr= or =new name1: Type, name2: Type ...= or =new name1 name2: Type = ...=
 
-   Declaration:
-   =new name = Expr= or =new name: Type = Expr=
-   with multiple:
-   =new name1, name2 = Expr= or =new name1: Type, name2: Type ...= or =new name1 name2: Type = ...=
+    Reassignment:
+    =old name = Expr=
+    with multiple:
+    =old name1, name2 = Expr=
 
-   Reassignment:
-   =old name = Expr=
-   with multiple:
-   =old name1, name2 = Expr=
+    Mixed declaration and reassignment:
+    =new newName1, newName2, old oldName = Expr=
+*** Heap
+    Declaration: =heap name = Expr= where =name= is a pointer, always. Otherwise
+    it's the same.
+*** Editing
+    Field editing:
+    =set name.field = Expr=
 
-   Mixed declaration and reassignment:
-   =new newName1, newName2, old oldName = Expr=
-
-   Field editing:
-   =set name.field = Expr=
+    Reference editing (only works for =mut= references or owned =ptr= pointers):
+    =set pointer << Expr=
 ** Data Types
-   CamelCase.
+   CamelCase
+*** Void
+    =void= is a keyword which is both a value and a type where:
+
+    =void (variable): void (type)=
 *** Simple
    Aliases: =alias NewType OldType=
    The =NewType= is identical in every way, it's an /alias/.
 
    Simple new types: =type NewType OldType=
-   The =NewType= has the same structure and functions, but you may define new functions for it.
+   The =NewType= has the same structure and associated procedures, but you may
+   define new procedures and implementations for it without modifying the
+   original.
 *** Enums
     #+begin_src text
       enum NewEnum {
-      	Variant1
-      	Variant2(InnerType)
-      	Variant3 { field1: Type, field2: Type}
+      	variant1
+      	variant2(InnerType)
+      	variant3 { field1: Type, field2: Type }
       }
     #+end_src
+
+    Accessing variants is done through the =--= operation, so =--variant1=. If
+    there are two or more =enum=​s with the same variant, we try to intuit from
+    the context. This may be impossible or you may want to avoid doing it, in
+    which case you can specify =NewEnum=>variant2(innerTypeInstance)=.
 *** Structs
     #+begin_src text
       struct NewStruct {
@@ -143,12 +160,45 @@
       	field2: Type
       }
     #+end_src
+
+    If the struct contains a reference, the reference's scope must be specified.
+    The struct becomes scoped, the scope is given a name, and the name is used
+    as a parameter to the =ref= or =mut= keywords:
+
+    #+begin_src text
+      struct RefWrapper scope s1, s2 {
+      	refField1: ref<s1> int,
+      	refField2: mut<s2> bool,
+      }
+
+      new integer = 1;
+      new boolean = true;
+
+      // No need to specify when creating the struct directly.
+      RefWrapper {
+      	refField1: &integer,
+      	refField2: *bool,
+      }
+
+      // But we MUST specify when returning from procedures using the @ operator.
+      function :: integer: int, boolean: mut bool -> RefWrapper<@integer, @boolean>
+      	return RefWrapper { refField1: &integer, refField2: boolean, };
+    #+end_src
+
+    Note we can use both owned and referenced types as arguments to =function=.
+    For references (=boolean=), we'll just take the scope of the reference and
+    copy it for the =RefWrapper= return value. For owned values (=integer=),
+    we'll first move the value to the heap (which will make it a =ptr= rather
+    than a =mut= or a =ref=, and =ptr=​s are owned, not references. That means
+    =@boolean= is the scope of the owning variable in the caller, but =@integer=
+    is a scope synonymous with this instance of =RefWrapper=.
 *** TODO Data
 *** Generics
-    Generics all have a scope. If a function uses generics, those generics exist
-    only within that function. Pretty obvious. The first use of a generic looks
-    like =#A= which says "I'm using an unconstrained generic type =A=.
-    Subsequently, you can just use =A= in the same function.
+    Generics all have a scope where the letter or word means "some generic
+    type." If a function uses generics, those generics exist only within that
+    function. Pretty obvious. The first use of a generic looks like =#A= which
+    says "I'm using an unconstrained generic type =A=." Subsequently, you can
+    just use =A= in the same function.
 
     Example:
     #+begin_src text
@@ -163,7 +213,7 @@
       	field: A,
       }
     #+end_src
-
+    
     In type definitions, you don't need to add the =#= in front of =A= because
     it's assumed that =A= is /always/ a generic. When using the type later, you
     /do/ need the =#=. This is to avoid the compiler figuring out whether this
@@ -192,7 +242,7 @@
 
       // Let's leave the Adder implementation aside for now.
 
-      addThree [A :: Adder] := a b c: A -> int = // function body
+      addThree [A: _Adder] := a b c: A -> int = // function body
     #+end_src
 
     Here we're defining a type class =A= which implements =Adder=. In this case
@@ -200,10 +250,128 @@
     type constraint, this is useful:
 
     #+begin_src text
-      append [A :: Adder] := list: List<A>, newVal: A = // function body
+      append [A: _Adder] := list: List<A>, newVal: A = // function body
     #+end_src
+*** Special Types
+**** Program
+     =Program= is a built-in type which refers to a series of operations
+     surrounded by ={ }=. The operations are executed in sequence, and return
+     nothing.
+
+     This is to avoid passing closures with no arguments and return values all
+     the time, but essentially this holds: =alias Program () >> _=.
+**** Embedded
+     The =Embedded= type is a sort of =Program= but it is executed on the
+     caller, i.e., it is embedded in the caller rather in the executing
+     procedure. In practice this is done so that you can return from function A
+     from within function B called inside A.
+
+     This is a classic example:
+
+     #+begin_src text
+       === Executes `program` if self is `void`, returns self ===
+       maybe #T | ifno :: program: Embedded -> T
+       	if me | isvoid {
+       		program | execute;
+       	}
+       	return me;
+
+
+       // In actual code:
+
+       new someVar = Expr | ifno return error;
+     #+end_src
+
+     In the above example we evaluate =Expr= whose type is =maybe Something=,
+     then we inspect the =maybe=. If it's =void=, we execute =return error;= IN
+     THE CURRENT FUNCTION (hence the embeddedness).
+
+     An =Embedded= block is either a return (=return=, =break=, =continue=,
+     =error=, =success=, and similar, followed by maybe an expression and then a
+     =;=), or a ={ }= Program. Be careful - if there is more stuff following
+     rather than an immediate =;=, you must use braces, otherwise all that
+     following stuff is taken to be a part of the returned expression.
+*** Type Operators
+    Some types deserve special constructors.
+
+    - strings are surrounded by "...".
+    - characters are '.'
+    - formatted strings are `...{}...` which creates a closure that accepts as
+      many arguments as there are ={}=​s, all of which must implement
+      =_ToString=.
+    - lists over =#T= are denoted as =...T=.
+*** TODO References and Pointers, Stack and Heap
+*** Annotations
+    Types can be augmented via the use of type annotations. An annotation does
+    not create a new type but rather enables some extra functionality which is
+    natively built into every type. Annotations have names and many can be
+    represented via symbols right in front of the type name.
+
+    You can only use annotations in type usage, not type definitions.
+**** Into
+     A value is of type =into T= if there is a known operation which turns that
+     variable into type =T=. Type =T= already satisfies this without change.
+     Closures =() >> T= are evaluated.
+
+     =into= adds laziness to the type. For example: =Iterator<#T>: into ...T=.
+     Note that the itererator doesn't need to be converted into a list, it
+     already is of type =into list=.
+
+     As soon as =into T= type is used as =T= for the first time, the registered
+     operation is performed without any extra syntax.
+
+     Symbol: into T == =T
+**** Fn
+     A value of type =fn T= has a registered operation which produces =T=
+     indefinitely. It's usually a function which gets us some value of type =T=
+     (not always the same value) whenever we call it. Of course, =T: fn T=.
+
+     Symbol: fn T == >> T
+**** Iterated
+     Iterated types are types which implement the =Iterator= interface. They
+     have a =next= procedure which produces =maybe T=.
+
+     Symbol: iter T == >T
+**** Maybe
+     Maybe is a nullability wrapper. A =maybe T= is either =void= or =T=. This
+     isn't an enum because that's too verbose. A series of built-in procedures
+     exist to work with =maybe= types, such as =ifno=, =forceInner=, =getor=,
+     etc.
+
+     Symbol: maybe T == ?T
+**** Failing
+     Failing is a monad. A =failing T= is either a T or an =Error= type.
+
+     To return a success, use =success Expr;=. To return a failure, use =error
+     "message"=.
+
+     Symbol: failaing T == !T
+**** Synced
+     Mutexes don't exit in Cease. They are built-in via the =synced= type
+     annotation. A =synced T= cannot be read until it's opened with either
+     =rlock= for read mutex lock, or =wlock= for writes. This operation returns
+     the appropriate reference to the value, and is unlocked either with =unlock
+     <var>= or when =<var>= goes out of scope.
+
+     Symbol: synced T == #T
+**** Ptr, Mut, Ref
+     These annotations denote pointers.
+
+     A =ptr= is a heap pointer owned by the current scope. It will be =free=​ed
+     when the scope ends.
+
+     A =mut= is a pointer owned by a parent scope. The data can be edited.
+
+     A =ref= is a pointer owned by a parent scope. The data cannot be edited.
+
+     Symbols:
+     - ptr T =​= ~T
+     - mut T =​= *T
+     - ref T =​= &T
 ** Procedures
-*** Functions
+*** TODO Functions
+    # Finish him (I mean this)
+
     Multiline:
     #+begin_src text
       functionName := argument1: Type1, argument2 argument3: Type2 -> ReturnType
@@ -226,5 +394,7 @@
     Functions have a type; the above would be =funcName: (Type) >> ReturnType=.
 *** TODO Pipes
 *** TODO Closures
+** TODO Blocks
+   (if, switch, plain {})
 ** TODO Interfaces
 ** TODO Package (export) management

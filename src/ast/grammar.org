@@ -10,27 +10,48 @@ Expressions have =terminators= (expressed here as single-quoted strings) which
 must appear as they are shown in the code, and literals - predefined types of
 terminators which are not always so simple to express.
 
+Regex things /after/ somthing are normal - * means it repeats 0 or more times.
+=?= /before/ something means that thing is recognisable for the pattern, but
+doesn't belong to it (it's the last element of the pattern), e.g.:
+=pipe ::​= stuff ( (NEWLINE | EOF) | ?'}')= Here the =?'}'= means that '}'
+terminates a =pipe= but shouldn't be counted as part of the pipe's expresson.
+
 * Literal Classes
   Literals come in these flavours:
 
   - BOOL: =true= or =false=
   - STRING: A block of text, quoted
+  - CHAR: character
   - NUMBER: Any of the number formats
   - NAME: Name of a named expression (e.g. variable, function, ...)
-* [0/3] Expression
+* TODO Statements
+  
+* [0/1] Irregular Syntax
   Expressions which evaluate to some mathematical value, either of the =BOOL= or
   =NUMBER= literal class.
 
   #+begin_example
-     expression          ::= pipeCall
-     pipeCall            ::= equality ( ('|' | '|>') functionCall functionCall* )* ( NEWLINE | EOF | '{' | '}' | ')' | ',' | ';' )
+     program             ::= statement* EOF
+
+     statement           ::= expression | assignment | type | procedure
+     assignment          ::= ( 'old' | 'new' ) NAME ( ',' ( 'old' | 'new' ) NAME )* ( '=' | '<-' ) expression (',' expression)*
+     procedure           ::= function | pipe | implementation
+
+     expression          ::= pipeCall | if | switch | for
+     if                  ::= 'if' equality '{' program '}' ( 'else if' equality '{' program '}' )* ( 'else {' program '}' )?
+     switch              ::= 'switch' access '{' ( 'case' access ':' program )+ '}'
+     for                 ::= 'for' ( expression | NAME 'in' expression ) block
+     block               ::= '{' program '}'
+
+     pipeCall            ::= equality ( ('|' | '|>') functionCall functionCall* )* ( (NEWLINE | ';' | ',') | ?( EOF | '{' | '}' | ')' ) )
      equality            ::= logic ( ('==' | '!=') logic )?
      logic               ::= comparison ( ('&&' | '||' | 'and' | 'or' | 'xor' | 'nand') comparison)?
      comparison          ::= sum ( ('<' | '<=' | '>' | '>=') sum )?
      sum                 ::= product ( ('+' | '-') product )*
      product             ::= binary_arithmetic ( ('*' | '/') binary_arithmetic )*
      binary_arithmetic   ::= unary ( ('^&' | '^|') unary )?
-     unary               ::= ('!' | '-')? functionCall
+     unary               ::= ( 'not' | '!' | '-' | '*' | '&' | 'rlock' | 'wlock' )? access
+     access              ::= functionCall ( ('.' | '::' | '=>') functionCall )*
      functionCall        ::= base ( '(' ( expression ( ',' expression )* )* ')' )*
      base                ::= BOOL | STRING | CHAR | NUMBER | 'void' | NAME | '(' expression ')'
   #+end_example
@@ -49,7 +70,6 @@ terminators which are not always so simple to express.
    #+begin_example
    builtin ::= ( 'unlock' | 'rlock' | 'wlock' ) LITERAL
    #+end_example
-* TODO Statements
 * TODO Abstract Syntax Tree (AST)
 * COMMENT File config
 # Local variables:

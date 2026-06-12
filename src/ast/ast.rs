@@ -296,9 +296,14 @@ mod test {
             end_location: loc!(1, 4),
         };
 
+        let access = Access {
+            base: function,
+            rest: vec![],
+        };
+
         let unary = expression::Unary {
             operation: Some(operation::Unary::Negative),
-            base: function,
+            base: access,
             start_location: loc!(1, 0),
         };
 
@@ -324,8 +329,12 @@ mod test {
             calls: vec![],
             end_location: loc!(1, 3),
         };
-        let unary1 = expression::Unary {
+        let access1 = Access {
             base: func1,
+            rest: vec![],
+        };
+        let unary1 = expression::Unary {
+            base: access1,
             operation: None,
             start_location: loc!(1, 0),
         };
@@ -339,8 +348,12 @@ mod test {
             calls: vec![],
             end_location: loc!(1, 16),
         };
-        let unary2 = expression::Unary {
+        let access2 = Access {
             base: func2,
+            rest: vec![],
+        };
+        let unary2 = expression::Unary {
+            base: access2,
             operation: Some(operation::Unary::Not),
             start_location: loc!(1, 9),
         };
@@ -548,6 +561,25 @@ mod test {
         test_expr!(pipe_expression(), PipeCall, tokens);
     }
 
+    #[test]
+    fn access() {
+        let tokens = tokens!(
+            [Literal(String::from("module")), [1, 0], [1, 5]],
+            [Symbol(Symbol::ColonColon), [1, 6], [1, 7]],
+            [Literal(String::from("struct")), [1, 8], [1, 13]],
+            [WordSeparator(WordSeparator::Dot), [1, 14], [1, 14]],
+            [Literal(String::from("func")), [1, 15], [1, 18]],
+            [WordSeparator(WordSeparator::LeftParen), [1, 19], [1, 19]],
+            [WordSeparator(WordSeparator::RightParen), [1, 20], [1, 20]],
+            [WordSeparator(WordSeparator::Dot), [1, 21], [1, 21]],
+            [Literal(String::from("field")), [1, 22], [1, 26]],
+            [Symbol(Symbol::DoubleArrow), [1, 27], [1, 28]],
+            [Literal(String::from("type")), [1, 29], [1, 32]],
+        );
+
+        test_expr!(access_expression(), Access, tokens);
+    }
+
     // -5
     fn minus_five() -> expression::Unary {
         let function = FunctionCall {
@@ -556,10 +588,15 @@ mod test {
             end_location: loc!(1, 10),
         };
 
+        let access = Access {
+            base: function,
+            rest: vec![],
+        };
+
         expression::Unary {
             operation: Some(operation::Unary::Negative),
             start_location: loc!(1, 9),
-            base: function,
+            base: access,
         }
     }
 
@@ -635,8 +672,13 @@ mod test {
             end_location: loc!(1, 21),
         };
 
-        expression::Unary {
+        let access = Access {
             base: function,
+            rest: vec![],
+        };
+
+        expression::Unary {
+            base: access,
             operation: Some(operation::Unary::Negative),
             start_location: loc!(1, 16),
         }
@@ -691,13 +733,16 @@ mod test {
                         base: expression::Unary {
                             operation: None,
                             start_location: loc!(1, 24),
-                            base: FunctionCall {
-                                calls: vec![],
-                                end_location: loc!(1, 24),
-                                base: Base::new(
-                                    BaseKind::Literal(Literal::Bool(true)),
-                                    location(loc!(1, 24), loc!(1, 24)),
-                                ),
+                            base: Access {
+                                rest: vec![],
+                                base: FunctionCall {
+                                    calls: vec![],
+                                    end_location: loc!(1, 24),
+                                    base: Base::new(
+                                        BaseKind::Literal(Literal::Bool(true)),
+                                        location(loc!(1, 24), loc!(1, 24)),
+                                    ),
+                                },
                             },
                         },
                     },
@@ -718,13 +763,16 @@ mod test {
                             base: expression::Unary {
                                 operation: None,
                                 start_location: loc!(1, 0),
-                                base: FunctionCall {
-                                    calls: vec![],
-                                    end_location: loc!(1, 22),
-                                    base: Base::new(
-                                        BaseKind::Group(Box::new(equality().to_expression())),
-                                        location(loc!(1, 0), loc!(1, 22)),
-                                    ),
+                                base: Access {
+                                    rest: vec![],
+                                    base: FunctionCall {
+                                        calls: vec![],
+                                        end_location: loc!(1, 22),
+                                        base: Base::new(
+                                            BaseKind::Group(Box::new(equality().to_expression())),
+                                            location(loc!(1, 0), loc!(1, 22)),
+                                        ),
+                                    },
                                 },
                             },
                         },
@@ -808,6 +856,27 @@ mod test {
         }
     }
 
+    // 000000000011111111112222222222333 = column, first digit
+    // 012345678901234567890123456789012 = column, second  digit
+    // module::struct.func().field=>type
+    fn access_expression() -> Access {
+        let modul = function_call("module", loc!(1, 0), loc!(1, 5), vec![]);
+        let struc = function_call("struct", loc!(1, 8), loc!(1, 13), vec![]);
+        let funct = function_call("func", loc!(1, 15), loc!(1, 18), vec![vec![]]);
+        let field = function_call("field", loc!(1, 22), loc!(1, 26), vec![]);
+        let type_ = function_call("type", loc!(1, 29), loc!(1, 32), vec![]);
+
+        Access {
+            base: modul,
+            rest: vec![
+                (AccessKind::Module, struc),
+                (AccessKind::Value, funct),
+                (AccessKind::Value, field),
+                (AccessKind::Field, type_),
+            ],
+        }
+    }
+
     fn name(name: &str, start: Location, end: Location) -> Base {
         Base::new(
             BaseKind::Literal(Literal::Name(String::from(name))),
@@ -834,6 +903,10 @@ mod test {
 
         for args in calls {
             let mut arguments = Vec::new();
+
+            if args.is_empty() {
+                end_location = end_location.add_column(2);
+            }
 
             for (arg_name, line, start_col, end_col) in args {
                 end_location = loc!(line, end_col).add_column(1); // +1 because of the closing parenthesis
@@ -864,9 +937,14 @@ mod test {
             calls: vec![],
         };
 
+        let access = Access {
+            base: function,
+            rest: vec![],
+        };
+
         expression::Unary {
             start_location: location.clone(),
-            base: function,
+            base: access,
             operation: None,
         }
     }

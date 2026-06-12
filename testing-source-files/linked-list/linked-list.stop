@@ -1,0 +1,116 @@
+// Also accessible with the .. operator:
+//  val | pipe | field Field=>name    ==    val | pipe .. name
+[T: _Struct] | field Field :: -> Field.type // buildin
+
+[T: _Enum] | isvariant T=>variantName -> bool
+
+interface Iterator<#A> {
+	next :: -> maybe A
+}
+
+interface [I: _Iterator<#A>] ToIterator<I> {
+	iter :: -> I
+}
+
+// Type annotations are: failing maybe iter into fn mut ref ptr locked writable readable
+
+
+struct LinkedList<#Data> {
+	data: Data,
+	next: maybe ptr LinkedList<Data>, // ptr means it's on the heap and we own it
+}
+
+
+struct LinkedListIterator<#Data> scope s {
+	current: maybe mut<s> LinkedList<Data>,
+}
+
+
+struct Person {
+	name: string
+	age: int
+	eyeColour: Colour,
+}
+
+
+enum Colour {
+	red,
+	green,
+	other(string),
+	rgb { red: int, green: int, blue: int },
+}
+
+
+newElement :: newVal: #Data -> LinkedList<Data> = LinkedList { data: newVal, next: void }
+
+
+impl Iterator<#Data>
+LinkedListIterator<Data> | next :: -> maybe mut<me.scope> LinkedList<Data>
+	new next = me.current
+	  | getor { return void }
+	  | field LinkedList=>next;
+	set me.current << next;
+	return *next;
+
+
+impl ToIterator
+LinkedList<Data> | iter :: -> LinkedListIterator<#Data> = LinkedListIterator (scope = me) { current: me }
+
+
+// Note: a: A <=> *a: mut<a> A <=> &a: ref<a> A
+
+LikedList<#Data> | last :: -> mut<me> LikedList<Data>
+	return me.next | getor { me } | last;
+
+
+LikedList<#Data> |> append :: newVal: into Data -> Self
+	me | last | setfield LinkedList=>next, newElement $ newVal;
+	return me;
+
+
+LinkedList<#Data> |> prepend :: newVal: into Data -> LinkedList<Data>
+	return newElement $ newVal | setfield LinkedList=>next, me;
+
+
+LinkedList<#Data> | apply :: op: (Data) <>
+	$$$ for element in me { op $ element.data };
+
+
+Person | print :: <> = say `{} ({}, eyes {})` $ me.name, me.age, me.eyeColour
+
+
+impl ToString:
+Colour | toString :: -> string
+	return switch me {
+		--red: case "red";
+		--green: case "green";
+		--other (o): case o;
+		--rgb { red, green, blue = b }: {
+			// Do something here
+			case `RGB #{}{}{}` $ red, green, b;
+		};
+	};
+
+
+main :: <>
+	new list = newElement $ Person {
+		name: "Tom",
+		age: 20,
+		eyeColour: --rgb { red: 0, green: 0, blue: 0 },
+	};
+
+	list
+	  |> append Person { name: "Zeb", age: 99, eyeColour: --red }
+	  |> append Person { name: "JoJo", age: 1, eyeColour: --green }
+      |> prepend Person {
+         name: "GBNews",
+         age: 88,
+         eyeColour: --rgb {
+             red: 10,
+			 green: 10,
+			 blue: 10,
+         }, }
+	  |> append Person { name: "Viki", age: 188, eyeColour: --other "blue" }
+	  |> prepend Person { name: "Anna", age: 36, eyeColour: --other "purple" };
+
+	terminate list | apply print;

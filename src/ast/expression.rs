@@ -91,8 +91,14 @@ pub struct BinaryArithmetic {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Unary {
     pub operation: Option<operation::Unary>,
-    pub base: FunctionCall,
+    pub base: Access,
     pub(super) start_location: Location,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Access {
+    pub(super) base: FunctionCall,
+    pub(super) rest: Vec<(AccessKind, FunctionCall)>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -127,6 +133,7 @@ pub struct Base {
 #[derive(Debug, PartialEq, Eq)]
 pub enum BaseKind {
     Literal(Literal),
+    Void,
     Group(Box<Expression>),
 }
 
@@ -801,6 +808,9 @@ impl ToString for Unary {
                 operation::Unary::Not => format!("!{}", self.base.to_string()),
                 operation::Unary::Negative => format!("-{}", self.base.to_string()),
                 operation::Unary::Dereference => format!("*{}", self.base.to_string()),
+                operation::Unary::Address => format!("&{}", self.base.to_string()),
+                operation::Unary::Wlock => format!("wlock {}", self.base.to_string()),
+                operation::Unary::Rlock => format!("rlock {}", self.base.to_string()),
             },
         }
     }
@@ -829,6 +839,21 @@ impl ExpressionTrait for Unary {
             match tokens.get(0) {
                 None => return Err(SyntaxError::empty("Unexpected end of file", tokens)),
                 Some(token) => match token.type_ {
+                    TokenType::Keyword(ref keyword) => match keyword {
+                        Keyword::Rlock => (
+                            Some(operation::Unary::Rlock),
+                            Some(token.start_location.clone()),
+                        ),
+                        Keyword::Wlock => (
+                            Some(operation::Unary::Wlock),
+                            Some(token.start_location.clone()),
+                        ),
+                        Keyword::Not => (
+                            Some(operation::Unary::Not),
+                            Some(token.start_location.clone()),
+                        ),
+                        _ => (None, None),
+                    },
                     TokenType::WordSeparator(ref separator) => match separator {
                         WordSeparator::Exclamation => (
                             Some(operation::Unary::Not),
@@ -856,7 +881,7 @@ impl ExpressionTrait for Unary {
             tokens.pop_front();
         }
 
-        let (base, tokens) = FunctionCall::parse_tokens(tokens)?;
+        let (base, tokens) = Access::parse_tokens(tokens)?;
 
         let unary = Unary {
             start_location: start_location.unwrap_or_else(|| base.start()),
@@ -865,6 +890,83 @@ impl ExpressionTrait for Unary {
         };
 
         return Ok((unary, tokens));
+    }
+}
+
+impl ToString for Access {
+    fn to_string(&self) -> String {
+        let mut base = self.base.to_string();
+
+        for (operation, function) in &self.rest {
+            base = match operation {
+                AccessKind::Module => format!("{base}::{}", function.to_string()),
+                AccessKind::Field => format!("{base}=>{}", function.to_string()),
+                AccessKind::Value => format!("{base}.{}", function.to_string()),
+            };
+        }
+
+        return base;
+    }
+}
+
+impl ExpressionTrait for Access {
+    fn start(&self) -> Location {
+        self.base.start()
+    }
+
+    fn end(&self) -> Location {
+        self.rest
+            .last()
+            .map(|x| x.1.end())
+            .unwrap_or_else(|| self.base.end())
+    }
+
+    #[cfg(test)]
+    fn to_expression(self) -> Expression {
+        Unary {
+            start_location: self.start(),
+            base: self,
+            operation: None,
+        }
+        .to_expression()
+    }
+
+    fn parse_tokens(tokens: VecDeque<Token>) -> SyntaxResult<(Self, VecDeque<Token>)> {
+        let (base, mut tokens) = FunctionCall::parse_tokens(tokens)?;
+        let mut accesses = Vec::new();
+
+        loop {
+            let token = match tokens.get(0) {
+                None => break,
+                Some(token) => token,
+            };
+
+            let access_kind = match token.type_ {
+                TokenType::WordSeparator(ref separator) => match separator {
+                    WordSeparator::Dot => AccessKind::Value,
+                    _ => break,
+                },
+                TokenType::Symbol(ref symbol) => match symbol {
+                    Symbol::DoubleArrow => AccessKind::Field,
+                    Symbol::ColonColon => AccessKind::Module,
+                    _ => break,
+                },
+                _ => break,
+            };
+
+            tokens.pop_front();
+
+            let (access, remaining_tokens) = FunctionCall::parse_tokens(tokens)?;
+            tokens = remaining_tokens;
+            accesses.push((access_kind, access));
+        }
+
+        let me = Self {
+            base,
+            rest: accesses,
+        };
+
+        return Ok((me, tokens));
     }
 }
 
@@ -897,10 +999,9 @@ impl ExpressionTrait for FunctionCall {
 
     #[cfg(test)]
     fn to_expression(self) -> Expression {
-        Unary {
-            start_location: self.start(),
+        Access {
             base: self,
-            operation: None,
+            rest: vec![],
         }
         .to_expression()
     }
@@ -1057,6 +1158,7 @@ impl ToString for Base {
         match &self.kind {
             BaseKind::Literal(literal) => literal.to_string(),
             BaseKind::Group(group) => format!("({})", group.to_string()),
+            BaseKind::Void => "void".to_string(),
         }
     }
 }
@@ -1131,6 +1233,7 @@ impl ExpressionTrait for Base {
             TokenType::Keyword(keyword) => match keyword {
                 Keyword::True => BaseKind::Literal(Literal::Bool(true)),
                 Keyword::False => BaseKind::Literal(Literal::Bool(false)),
+                Keyword::Void => BaseKind::Void,
                 _ => unimplemented!("Named expressions not yet implemented"),
             },
             TokenType::String(sentense) => BaseKind::Literal(Literal::String(sentense)),
