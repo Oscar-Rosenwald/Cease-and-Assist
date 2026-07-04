@@ -1,0 +1,1249 @@
+:preamble:
+Cease is an expression-driven language, meaning almost every semantic unit has a value, including what in
+other languages would be a value-less statement such as ~if~ or even ~use~ (package import). It is also a
+space-saving language, meaning it has a plethora of symbols and shortcuts which make learning the language
+difficult but, once mastered, make in turn parsing the code fast. To that end, Cease is also designed to be
+readable in an unfontified environment such as GitHub's PR review page or ~cat~ in the command line. Different
+concepts in Cease have distinct symbols, unlike most other languages where the ~.~ operator is extremely
+overloaded (~something.other~ could mean package import or field access or a method call and you wouldn't
+know; so in Cease ~a.b~ is a field data access whereas ~a:b~ is a package->symbol call etc.).
+
+Cease has these major distinctions from other languages:
+
+- Cease provides a data-centric approach to types, including first-class database integration (no untyped
+  strings which encode some SQL!) and Json/Yaml/Toml/... parsing.
+- Cease's types have out-of-the-box type annotations which encapsulate many common concepts represented by
+  more types in other languages, such as the ~err A~ annotation which means "this is either type A or an
+  error". Any type has these annotations, including user-defined types.
+- Reflection is a core part of Cease. The ~Type~ and ~Field<#Parent>~ types are built-in and always available,
+  and procedures (functions and pipes) can be defined on raw types rather than on values of those types.
+- Cease has pipes which make parsing the code (human-parsing, that is) easier and which implement monadic
+  paradigms without any extra code (if the first element of pipe e.g. throws an error, that error propagates
+  through the pipe without the other parts of the pipe explicitly handling the error cases, and the user has
+  to deal with the error only at the end of the pipe).
+- A rich, one might say wealthy, type system which understands generic types, generic constraints, Go-like
+  interface types, simplified Rust-like ownership, mutability encoded in type annotations, explicit but
+  unrestricted interface implementations, exhaustive switches and struct declarations, and the ability to
+  define custom, type-checked metadata of type (data) fields.
+- A Go-style async model except spawning threads or routines returns a future/promise-like object with the
+  routine's eventual result and a native ~wait~ mechanism.
+
+Cease allows the user to split an expression among many lines, particularly piped expressions, so expressions
+are terminated with semicolons to disambiguate newlines:
+
+#+begin_src cease
+  someValue
+    |  pipe1
+    |  pipe2
+    |> pipe3;
+#+end_src
+:end:
+* Variables
+Cease variables are mutable but mutating them is discouraged and so requires a keyword.
+
+Variables are owned by the scope which created them, and freed when the scope ends. A variable on the stack is
+created using the ~new~ keyword, while variables on the heap use the ~heap~ keyword. Heap variables are
+pointer whose data is owned by the scope, unlike references, which are pointers whose data is not owned (more
+on this later).
+
+The ~old~ keyword is used for re-setting the value of a variable. Assignments are done through ~=~ for
+variables and through ~<-~ for pointers; these are equivalent in C to src_go{pointerVar = newPointer} and
+src_go{*pointerVar = newValue}.
+
+The type of a variable can often be inferred from the expression, but it may be supplied additionally.
+Variables in procedure arguments must be given a type always. It is possible to override a variable with a
+variable of a new type, which makes the old value go out of scope.
+
+Variables can be global (on the module level - see later for modules and packages), or local to a procedure.
+
+#+begin_src cease
+  // Basic variables on the stack
+  new stackVar = 7;
+  old stackVar = 8;
+  new stackVar = "string"; // The 8 is now inaccessible
+
+  // Values on the heap
+  heap heapVar = 9; // Yes, we create a pointer to an in on the heap.
+  old heapVar <- 10; // Changes the heap data
+  old heapVar = 11; // old stack data goes out of scope, we're creating a new heap block.
+  old heapVar = "string"; // Would not compile
+  heap heapVar = "string"; // This DOES compile
+
+  // With types
+  new stackVar: int = 0; // stackVar is of type 'int'
+  heap heapVar: int = 1; // heapVar is of type 'ptr int'
+#+end_src
+
+Keywords ~new~ and ~heap~ produce no result. You can use them as expressions, but the value they return is
+~void~. The ~old~ keyword produces a result equal to the old value, making ~old~ a swap in principle. I
+wouldn't use this too often if I were you. If the value emitted by ~old~ isn't read, the compiler will not
+emit anything.
+
+#+begin_src cease
+  new var = 1;
+  new oldValue = old var = 2;
+  // oldValue == 1
+
+  heap var = "string";
+  heap oldString = old var <- "otherString";
+  // oldString == ptr to "string"
+
+
+  // Assigning multiple values
+  new var1, var2, var3 = 1, true, 'a';
+  // reassign var1 and var3, create a new var2:
+  old var1, var3, new var2 = 2, 'b', "new var2";
+#+end_src
+* Constants
+In Cease, constants can be of any type. The constant is baked into the binary.
+
+#+begin_src cease
+  const someConst = "constant string";
+#+end_src
+* [0/1] Types
+Cease treats types quite broadly. Generic types are very common, as are constraints and type classes etc. Most
+languages with generic types use ~T~ and ~U~ and ~V~. In Cease we go the Haskell way, so generic types are
+either ~A~, ~B~, ~C~, or they are given actual names like ~Parent~. There is a chapter on generics, so for now
+just know that ~A~ is a generic type.
+** Built-in types
+*** Void
+The most basic type in Cease is ~void~. A constant variable ~void~ of type ~void~ exists, so the word "void"
+can be used as both a type and a value, which is nice e.g. in functions which will return ~void~ and which can
+terminate with ~return void;~.
+*** Standard
+- int
+- char (~'c'~)
+- bool
+- float (~1.0~)
+- range
+  - ~[a..<b]~ numbers from a to b-1
+  - ~[a..b]~ numbers from a to b
+  - ~[..<b]~ numbers from 1 to b-1
+  - ~[..b]~ numbers from 1 to b
+- list: denoted by the ~...~ type operator: ~...int~. List are indexed from *1* because it's how people think,
+  for fuck's sake. ~new list = [1 2 3 4];~
+- string and its variants
+**** String
+A ~string~ is a generic string of any format. Hard-coded strings are in the binary, constructed strings are
+dynamically created on the heap.
+
+~line~ is a string with no newline characters. When reading a text file, you get a list of ~line~​s, not a list
+of ~string~​s.
+
+~word~ is a string with no whitespace. Splitting a ~string~ or a ~line~ by whitespace gets you a list of
+~word~​s.
+
+All types of strings are created as ~"string string"~​. The validity of ~word~ and ~line~ is checked at compile
+time when the string is literal, and enforced by the functions and pipes you use during run time.
+*** Program
+A ~Program~ is a series of statements. It is a type of closure except it's easier to construct because it has no
+input and no output. ~Program~​s are mostly used by the core library.
+
+Programs are created by braces:
+
+#+begin_src cease
+  expression;
+  expression;
+  functionCall $ {
+      programExpression;
+      programExpression;
+  };
+  expression;
+#+end_src
+*** Embedded
+An ~Embedded~ type is used by the core library and not exported because it's too confusing for mere mortals.
+It's a type of ~Program~ which is executed in the caller's stack. It's used mostly for early returns. Pipes
+such as ~ifer~ use the ~Embedded~ type so that the caller can do:
+
+#+begin_src cease
+  someFailingOp | ifer return false;
+  // Continue function if not error.
+#+end_src
+
+Like a ~Program~, ~Embedded~ expressions are constructed by ~{ ... }~, but there's also the special case of a
+terminator expression (such as ~return~, ~loop~, etc.) which, if it's the only thing in the embedded program
+and is the last bit of the expression (such as in the example, i.e., followed by ~;~), don't need to be
+wrapped in braces at all. By contrast, here we still have a single terminator, but there is more to follow in
+the expression, so we must wrap the ~Embedded~ block:
+
+#+begin_src cease
+  someFailingOp
+    | iferr { return false; }
+    | pipeCall;
+#+end_src
+*** Self
+When defining interfaces, we may use the ~Self~ type as a generic type which will be resolved to the concrete
+type implementing the interface. Interfaces are discussed later, so this is just for completeness.
+
+#+begin_src cease
+  interface SomeInter {
+      // Here "Self" means "the type which implements SomeInter"
+      Self | somePipe :: -> Self;
+  }
+
+  // Here, "Self" will trurn into "int" which is the concrete type.
+  impl SomeInter
+  int | somePipe :: int: // continue with pipe definition
+#+end_src
+** Annotations
+Types can be augmented via the use of type annotations. An annotation does not create a new type but rather
+enables some extra functionality which is natively built into every type. Annotations have names and many can
+be represented via symbols in front of the type name for /speeeeed/.
+**** Into
+A value is of type ~into A~ if there is a known operation which turns that variable into type ~A~. Type ~A~
+already satisfies this without change. Closures ~() => A~ are evaluated. Async code of type ~into A~ waits
+until the async routine finishes, then returns type ~A~. Basically, ~into~ adds laziness to the type.
+
+As soon as ~into A~ type is used as ~A~ for the first time, the registered operation is performed without any
+extra syntax, but under the hood Cease calls the ~into<A>~ pipe of the ~_Into<#A>~ interface (ignore the
+symbols and for now).
+
+Symbol: ~into A~ == ~=A~
+**** Fun
+A value of type ~fun A~ has a registered operation which produces ~A~ repeatedly. It's usually a function
+which gets us some value of type ~A~ (not always the same value, but the same type) whenever we call it. Of
+course, ~A: fun A~, closures are of type ~fun A~, etc.
+
+Symbol: ~fun A~ == ~>T~
+**** Maybe
+Maybe is a nullability wrapper. A ~may A~ is either ~void~ or ~A~. This isn't an enum because that's too
+verbose. A series of built-in procedures exist to work with ~may~ types, such as ~isvoid~, ~unvoid~, ~getor~,
+etc.
+
+Symbol: ~may A~ == ~?T~
+**** Iterated
+Iterated types are types which implement the ~_Iterator~ interface. They have a ~next~ procedure which produces
+~may A~. When the underlying sequence ends, ~void~ is returned on the next call to ~next~.
+
+Symbol: ~itr A~ == ~>>A~
+**** Failing
+Failing is a monad. An ~err A~ is either an ~A~ or an ~Error~ type.
+
+When a variable of type ~A~ is used as an ~err A~, no syntax is needed. E.g. a function returning ~err int~
+can just ~return 8~. Errors are discussed in detail later.
+
+Symbol: ~err A~ == ~!A~
+**** Ark
+Mutexes don't exit in Cease. They are built-in via the ~ark~ type annotation. An ~ark A~ cannot be read until
+it's opened with either ~rlock~ for read mutex lock, or ~wlock~ for writes. This operation returns the
+appropriate reference (pointer) to the value, and is unlocked either with ~<var> |> unlock~ or when ~<var>~ goes
+out of scope (ignore the ~|>~ for now and just accept it).
+
+"Ark" is called ark as in a chest, as in something lockable that has a treasure in it.
+
+#+begin_src cease
+  new lockedInt: ark int = 8 | lock;
+
+  new readRef = lockedInt | rlock; // readRef is a read-only pointer AKA a "reference"
+  // Use readRef
+  readRef |> unlock;
+
+  new writeRef = lockedInt | wlock; // a write-pointer AKA "mut pointer"
+  // Use writeRef, e.g.
+  old writeRef <- 9;
+  writeRef |> unlock;
+#+end_src
+
+Symbol: ~ark A~ == ~#T~
+**** Ptr, Mut, Ref
+These annotations denote types of pointers.
+
+A ~ptr~ is a heap pointer owned by the current scope. It will be ~free~​ed when the scope ends or when the
+~free~ pipe is called.
+
+A ~mut~ is a pointer owned by a parent scope. The data can be edited. When the pointer goes of out scope,
+nothing happens to the data.
+
+A ~ref~ is a pointer owned by a parent scope. The data /cannot/ be edited.
+
+Symbols:
+- ~ptr A~ =​= ~~A~
+- ~mut A~ =​= ~*A~
+- ~ref A~ =​= ~&A~
+
+Turning a type into a ~mut~ or ~ref~ is done by the same symbol (~*var~ or ~&var~), or by an appropriate type
+(~var | ref~ or ~var | mut~).
+
+~ref~​s and ~mut~​s don't own the data they point to. They can appear inside of structs or be returned from
+procedures only if the data itself is still in scope, which is checked at compile time. If you need to use
+pointers in structs but can't maintain this ownership, use ~ptr~ to put the data on the heap, which works
+because ~ptr~​s own their data.
+
+*Advanced*: ~ref~​s and ~mut~​s can be returned from pipes (not functions) as long as the payload is a reference
+as well. The returned reference's lifetime is tied to that of the payload, and the reference will go out of
+scope when the payload does. This means references can be returned only from chill pipes since grabby pipes
+consume their payloads which would make the returned reference immediately freed. Example:
+
+#+begin_src cease
+  ref ...#A | find :: match: (ref A) => bool -> may ref A:
+      for element in self | iterRefs :
+          loop if match $ element: return elemenent;
+      return void;
+
+  new list = [1 2 3 4];
+  new element: may ref int = list | find (x) { *x == 2 };
+  list | drop; // element also goes out of scope.
+#+end_src
+** Basic Types and Aliases
+The most basic way to define a new type is to create an alias for an existing one. There are two types of
+aliases.
+
+The first type is an alternative name for the original type: ~alias NewType ExistingType~. This alias declares
+~NewType~ but you cannot treat it as a separate thing to ~ExistingType~. E.g. defining a pipe on ~NewType~
+also defines it on the ~ExistingType~).
+
+The second alias is type inheritance: ~type NewType ExistingType~. This declares ~NewType~ to be of the exact
+form as ~ExistingType~ and inherit all its properties and pipes, fields etc., but ~NewType~ is an actual type
+in its own right. Pipes defined on ~NewType~ are not defined on ~OldType~. The built-in string variants ~word~
+and ~line~ are both inherited types:
+
+#+begin_src cease
+  type line string;
+  type word string;
+#+end_src
+
+The difference between aliases and inherited types is best shown by an example:
+
+#+begin_src cease
+  // Define one alias and one inheritted type
+  alias AliasString;
+  type NewString string;
+
+  // Define a new struct which requires a pure string.
+  struct MyStruct {
+      field: string,
+  }
+
+  new aliasStr: AliasSTring = "string";
+  new newStr: NewString = "string";
+
+  // Now construct two MyStructs.
+  new myStruct1 = MyStruct << field: aliasStr >>; // This works, aliasStr is of type 'string'
+  new myStruct2 = MyStruct << field: newStr >>; // Doesn't work, newStr is of type 'NewString' which isn't 'string'
+#+end_src
+** Enums
+In Cease, enums can have pure variants and "fat" variants, which contain other data. Enums are technically
+unions, but I ain't calling them unions because they're enums, goddammit!
+
+Enum variants are accessed either by the ~--~ operator (~--red~ might be of enum type ~Colour~) or by
+specifying the type (~--(Colour)red~). To make things short, we can use ~--red~ as long as the type (~Colour~)
+is known. E.g. if a function accepts ~Colour~ enum, we can pass ~--red~; or if we're switching over an enum.
+If the type isn't known (e.g. during variable declaration) we must use the full name to disambiguate the
+colour ~--red~ from some other theoretical thing like stratum ~--red~.
+
+For clarity, when using enums as types (rather than for declarations), we prepend it with the ~@~ symbol. In
+practice this means inside of other type definitions (e.g. struct fields might be of type ~@Colour~) or
+procedure definitions (a function returns a ~@Colour~).
+
+#+begin_src cease
+  type ColourSpan int; // Must be 0-255
+
+  enum Colour {
+      // Pure variants
+      red,
+      green,
+      blue,
+
+      // Fat variants with named fields
+      other {
+          r: ColourSpan,
+          g: ColourSpan,
+          b: ColourSpan,
+      },
+
+      // Fat variants with unnamed fields
+      evenMore {_: string},
+  }
+
+  // Define some colour variables. Note we needn't use the @ symbol because the
+  // syntax --(Colour)red already implies Colour is an enum.
+
+  new colour1 = --(Colour)red;
+  new colour2 = --(Colour)other << r: 0, g: 70, b: 180 >>, // In reality we'd need to make sure here the ints are ColourSpans
+  new colour3 = --(Colour)evenMore << "magenta" >>;
+
+
+
+  // Define a function which takes in a colour object. Note the @ before Colour.
+  someFunc :: colour: @Colour: // Continue func definition.
+
+  // Call the function - can use the -- notation because we know it's of type Colour
+  someFunc $ --red
+#+end_src
+** Structs
+Cease structs are quite simple. They are meant to be used exclusively for storing data which remains inside
+the binary. As soon as the data moves out, be it to a file, a database, through the network, or is converted
+to other formats like Json or Yaml or any other, structs are not going to be possible, and ~data~ must be
+used. This is an intentional limitation to make programmers aware how a type is meant to be used.
+
+For this reason, structs are very simple to define and declare. As with other type vs. usage cases, the
+definition is wrapped in braces but the declaration, which must be exhaustive, is surrounded by double
+chevrons ~<< ... >>~.
+
+#+begin_src cease
+  struct MyStruct {
+      field1: word,
+      field2: into int,
+      field3: itr ptr MyStruct,
+  }
+
+  new myStruct = MyStruct <<
+      field1: "word",
+      field2: 8,
+      field3: emptyIterator<MyStruct> $ >>;
+#+end_src
+** TODO Data
+Data is a kind of struct with extra, *extra* metadata. Data types are the main selling point of Cease.
+
+#+BEGIN_TODO
+- snake_case
+- properties (Go-tags) on fields, including custom ones. Also describes in Reflection/Data_field_properties,
+  so focus on the builtin ones for SQL, Json, Yaml, Toml, and Proto.
+- A deprecated section where renamed or removed fields are stored, and a way to indicate when they were
+  deprecated and why (via a property), and a way to indicate what renamed fields were renamed to (probably a
+  separated ~RenamedFrom~ property?).
+- Built-in properties for data manipulation like ~json~, ~yaml~, ~sql~ etc, and a default for all of those
+  which is the field name.
+- Properties on the data type itself, like ~jsonable~ or ~sqlable~ so that nobody would ever attempt to ~yaml~
+  that data. This will also require/forbid some field properties tied to the trait.
+#+END_TODO
+
+#+begin_src cease
+  base data user {
+      identifier Uuid {
+          primaryKey
+          sql:identifier
+      }
+      Name word {
+          required
+          auth:validLastName
+          sql:name
+      }
+      age int {
+          auth:validAge
+          sql:age
+      }
+      random_field bool {
+          sql:random_field
+      }
+  } // no properties on a base, only on the current version
+
+  // 1. Create the base user.
+  // 2. Rename Name to name.
+  // 3. Deprecate age.
+  // 4. Rename name to last_name; add first_name.
+  // 5. Rename identifier to id.
+  // 6. Add a reference to permissions.
+  // 7. Delete random_field (not deprecate).
+  // 8. Retype last_name from word to line
+
+  data user {
+      id: Uuid {
+          primaryKey
+          sql:id
+      }
+      sec permission_id: Uuid {
+          notNull
+          sql:permission_id
+          foreignKey:Permission=>id
+      }
+      first_name: line,
+      last_name: line {
+          required
+          auth:validLastName
+          sql:last_name
+      }
+  } [
+      // Properties of the type
+      properties {
+          table:users
+          proto
+          json
+          db
+          version:--v2
+      }
+
+      // identifier is no longer called that. id is the same field, called something else.
+      renamed identifier Self=>id,
+      renamed Name Self=>name {
+          reason:"capitals are a nono"
+      }
+
+      // No longer appears anywhere - not the DB, not json, not nottype
+      deleted random_field bool {
+          sql:random_field
+      }
+
+      // still in use by clients (e.g. via json) but not on the BE. Can still access
+      // this field by user.deprecated.age.
+      deprecated age: int {
+          sql:age
+          auth:validAge
+          // identifier is no longer called that. id is the same field, called something else.
+          since:--8_2 // Deprecated on this version
+          until:--8_3 // To be removed on this version and move to the history section
+          reason:"HIPPA or whatever"
+      }
+
+      // A sort of deprecation. Clients may use this, but it's automaticaly stored in last_name.
+      // You cannot access this field any longer. It's basically a rename that's backwards compatible.
+      redirect name Self=>last_name {
+          since:--8_1
+          until:--8_3
+          reason:"name is vague"
+      }
+  ] 
+
+  prop sql word;
+  prop required bool;
+  prop primary bool;
+  prop auth name;
+  prop table word;
+  prop proto bool;
+  prop json bool;
+  prop db bool;
+  prop version Version;
+  prop reason line;
+  prop since Release;
+
+  enum Version {
+      v1,
+      v2,
+      v3,
+  }
+
+  enum Release {
+      8_1,
+      8_2,
+      8_3,
+  }
+
+  data Permission {
+      id Uuid {
+          primaryKey
+          sql:id
+      }
+  } properties {
+      table:properties
+      db
+  }
+#+end_src
+** Interfaces
+Interfaces in Cease serve both as constraints to generic types and as types themselves. The generic use case
+will be handled later. For now: Interfaces are a collection of pipes which a type must have to implement the
+interface. Since pipes are discussed later, we won't go too deep into how that's done.
+
+Interfaces can have default implementations of some pipes and at least one non-default pipe which is used to
+determine whether a type implements the interface. The special type ~Self~ is used inside the interface
+definition to refer to the concrete implementing type.
+
+Interfaces can be used as types in and of themselves. They are implemented Go-style as fat pointers. When an
+interface is used as a type (i.e., not in its definition or when declaring an implementation block), we
+prepend ~_~ to the interface name to indicate it's an interface.
+
+Implementations of interfaces are done via the ~impl~ keyword before the name of the pipe you're implementing.
+Ignore the pipe syntax, that'll come later.
+
+#+begin_src cease
+  interface StringReader {
+      // Reads string from somewhere, returns an error on failure, returns void
+      // when done. This pipe must be implemented.
+      Self | read :: -> err may string;
+
+      // Reads the next, ignores the value. This pipe has a default implementation
+      // which may be overwriten.
+      default Self | ignoreNext :: -> err void;
+  }
+
+  // implement the default pipe
+  _StringReader | ignoreNext :: -> err void: // Continue with definition
+
+
+  // Use StringReader as an argument to a function. Here, 'reader' is a pointer to
+  // the implementation object.
+  someFunc :: reader: _StringReader -> err void: // Continue
+
+
+  // Now add an implementation of the interface
+  struct File {
+      // some OS specific fields
+  }
+
+  // Implement the interface
+  impl StringReader
+  File | read :: -> err may string: // implement the pipe
+
+  // override the default ignoreNext pipe
+  impl StringReader
+  File | ignoreNext :: -> err void: // implement
+
+
+  // Use someFunc
+  someFunc $ File << ... >>;
+#+end_src
+** Generics, Classes
+Generics are valid during the scope they're created in, which is either a type definition (struct, interface,
+etc.) or a procedure. Generic types are either "extremely" generic (~A~) or descriptive (~Parent~ for
+something that's your parent rather than a confusing ~A~). To avoid confusion between generic types and real
+types, the first usage of a generic type is prepended with ~#~, such as ~#A~ or ~#Parent~. Following
+occurrences of the type in the scope are normal.
+
+A generic type is matched not only by a concrete type (which is normal), but also by other generic types. This
+is particularly useful in tandem with type annotations. For example:
+
+Function f1 uses some generic ~#A~. Function f2 uses f1. Function f2 also uses a generic ~#A~, but f2 works
+with errors, so it's actually ~err #A~. Function f2 can pass the variable of type ~err A~ to f1 because ~err
+A~ is within the generic constraint ~A~ (i.e., no constraint). This is a long way of saying that you can use
+type annotations with generics freely.
+
+Generics may be limited to a class of types. A class of types is represented by an interface. To indicate
+this, we put a class block at the beginning of the scope:
+
+#+begin_src cease
+  #A | somePipe :: ... // Pipe which works with absolutely any type
+
+  [A: _ToString] A | otherPipe :: ... // Pipe which works with any type which implements _ToString.
+#+end_src
+
+Note ~#~ can be omitted in the class block.
+** Constraints
+Types can be constraint by other types. This is indicated by ~<...>~ in their type definition. For example, a
+linked list is constraint by the type of its elements. The type may be generic.
+
+#+begin_src cease
+  struct LinkedList<#A> {
+      currentValue: A,
+      next: may ptr LinkedList<A>,
+  }
+#+end_src
+
+Constraints may then be used in pipes, and the pipes are defined on the constraint type, not the type, so
+these two are distinct procedures despite having the same name:
+
+#+begin_src cease
+  LinkedList<string> | pipe :: ...
+
+  LinkedList<int> | pipe :: ...
+
+  // We have not defined a LinkedList for e.g. chars, so this isn't valid.
+  new charList = LinkedList << currentValue: 'a', next: void >>;
+  charList | pipe;
+
+  // However, we can define a generic implementation instead
+  LinkedList<#A> | pipe :: ...
+  // And now this works
+  charList | pipe;
+
+  // The only problem is that these definitions conflict. ints are of generic type
+  // #A, so there are actually two definitions of pipe for int (and for string,
+  // too). We prefer the concrete type, but can't always figure that out. To make
+  // things clear, we disambiguate.
+  new intList = LinkedList << currentValue: 0, next: void >>;
+  intList | pipe; // uses int | pipe
+  intList [LinkedList<#A>] | pipe; // uses #A | pipe
+#+end_src
+* Procedures
+** Functions
+Functions take any number of (named) arguments and return any number of (optionally named) values. They can be
+written in a one line shorthand or in long form. They are terminated by the ~return~ keyword, even if they
+return nothing (such functions return ~void~ implicitly).
+
+#+begin_src cease
+  onelineFunc :: arg: Type -> ReturnType = ReturnType << ... >>;
+
+  multilineFunc :: arg1: Type1, arg2 arg3: Type2 -> ret1: RetType1, RetType2:
+      doStuff;
+      moreStuff;
+      return RetType1 <<
+          ... >>,
+        RetType2 <<
+          ... >>;
+
+#+end_src
+
+Some special cases:
+- If the function has no arguments, we use ~:: -> RetType:~.
+- If the function has no return value, we use ~:: arg: Type:~.
+- If the function returns nothing and has no arguments, we can use ~:::~.
+  #+begin_src cease
+    noReturnFunc :::
+      doStuff;
+      return;
+  #+end_src
+- If the function returns ~void~, we can put anything after ~return~ without actually returning anything:
+  #+begin_src cease
+    noReturn :: arg: string:
+        return arg; // Doesn't return arg but ends the function nonetheless.
+  #+end_src
+
+Calling a function is done through the ~$~ operator, which is one of the ways that functions and pipes are
+differentiated when used.
+
+#+begin_src cease
+  returnSelf :: arg: #A, ignored: #B -> A:
+      return arg;
+
+  someFunc $ "string" 0; // evaluates to "string"
+#+end_src
+** Closures
+There's nothing strange about closures in Cease except how they're declared:
+
+#+begin_src cease
+  // Named closure
+  new closure1: (string) => string = (arg: string) -> string {
+      return "string";
+  };
+
+
+  // Using closures as arguments
+  map :: from: #A, morph: (A) => #B -> B:
+      return morph $ from;
+
+  // We don't need to specify the argument and return types when used in an
+  // unnamed context, and if the closure is one line long and doesn't end in a
+  // ';', 'return' is implied.
+  map $ 1 (num) { num + 1 }; // evaluates to 2
+
+
+  // Closures without return values
+  doThing :: arg: #A, do: (A) = do $ arg;
+
+
+  // Closures without arguments
+  doThing :: do: () => #A -> A = do $;
+
+
+  // Closures without arguments or return values are just Programs, so
+  doThing :: do: () = do $;
+  // can be written as
+  doThing :: do: Program = do | execute;
+#+end_src
+** Pipes
+Pipes are the most complex procedure type. They have a payload, a pipe kind, and arguments and return types
+like functions.
+
+*Pipe Kind*:
+
+Pipes can be /grabby/ which consume the payload (take over ownership of the data and free it when the pipe
+ends) or /chill/ (non-grabby, don't take ownership). Chill pipes are denoted by ~|~ and grabby ones by ~|>~.
+Note that a grabby pipe can take in a reference, and the reference will no longer be in scope after that.
+
+*Payload*:
+
+A pipe's payload is a variable with the keyword name ~self~. The payload's type is written at the start of the
+pipe definition, followed by the pipe symbol, then pipe name, ~::~, arguments, and return values. Payloads can
+be generic or constraint or contain classed generics etc. A pipe defined on two constraint types with
+different constraints are two different pipes regardless of their names.
+
+If the pipe is chill, the payload must for obvious reasons be ~ref~ or ~mut~ or be hard-coded constants like
+"string" or 8 (number) which wouldn't be able to be used later anyway.
+
+Pipes are used to implement interfaces. An interface can contain only pipes, and indicates the pipe kind.
+
+#+begin_src cease
+  #A |> grabbyMap :: morph: (A) => #B -> B = morph $ self;
+
+  ref #A | chillMap :: morph: (ref A) => #B -> B = morph $ self;
+
+  // This still compiles because A is a generic, and ref int satisfies it.
+  #A | otherChillMap :: morph: (A) => #B -> B = morph $ self;
+
+  // This does NOT compile because int isn't a generic. We need 'ref int' or make
+  // it a grabby pipe with |>.
+  int | intChillMap :: ...
+
+  new incremented: int = 8 | otherChillMap (num) { num + 1 }; // incremented = 9
+  old incremented = incremented |> grabbyMap ... ; // FAIL because 'old' means we want to reuse 'incremented' but the grabby pipe prevents that.
+  new incremented = incremented |> grabbyMap ... ; // works because 'new' creates a new variable; incremented = 10
+  new incremented = incremented | chillMap ... ; // automatically passes a reference, no need to do '&incremented'; incremented = 11
+  old incremented = incremented | intChillMap ... ; // incremented = 12
+  old newInc = 7 | chillMap ... ; // FAIL because chillMap explicitly needs a 'ref' and '7' is not a 'ref'
+#+end_src
+
+Pipes can be evaluated without the payload, which returns a closure. This is particularly useful when a
+procedure expects a closure and we have a pipe ready for that purpose.
+
+#+begin_src cease
+  int | pipe :: arg: string -> char = ...;
+
+  new pipeClosure: (int) => char = pipe "string";
+  new pipeResult: char = pipeClosure $ 7;
+
+
+  #A | map :: morph: (A) => #B -> B: morph $ self;
+
+  int | inc :: incBy: int -> int = self + incBy;
+  7 | map (inc 2); // evaluates to 9
+#+end_src
+* Blocks
+A block is an expression with inner expressions. It always evaluates to something.
+
+There are a few keywords recognised by blocks: ~yield~ which returns a value from some blocks, ~cascade~ which
+is like ~yield~ but for nested blocks, yielding all the way to the top, ~break~ which stops some blocks'
+execution, and ~loop~ which other languages call ~continue~. The key point is that all of these take a value
+as well as terminating the blocks.
+
+Some blocks may never get to compute a value (e.g. a while block which may not run its body at all). Those
+return ~may A~. Other (if-else) return reliably, so evaluate to some ~A~.
+** If
+#+begin_src cease
+  // Flat
+  new val: int = if Expr:
+      yield 0;
+  else if Expr:
+      yield 1;
+  else:
+      doSomething;
+      yield -1;
+
+
+  // Nested
+  new val: may int = if Expr:     // outer
+      new value = if Expr: // inner
+          yield Expr; // terminates inner
+      else:
+          yield -1;
+
+      if Expr: // inner2
+          cascade value; // terminates outer
+
+      yield 0;
+
+
+  // oneline also available
+  new val: ?int = if Expr: -1;
+#+end_src
+** While
+Using ~break~ will return from the while loop with a value. Using ~loop~ is the same except it won't exit, but
+trigger a new condition check. If this fails, the expression given to ~loop~ is used as the resulting value of
+the while block.
+
+#+begin_src cease
+  while Expr {
+	 do shit
+  }
+
+  new var: may int = while a < 10 loop a;
+#+end_src
+
+A while block always returns ~may A~. In the example above where while is used as an expression, it will
+return ~void~ if ~a~ is immediately >= 10, and will return the last ~a~ that satisfied the condition.
+** For
+The for loop is iterator-specific. ~for x in _ToIterator Embedded~. If you don't care about the value and only
+about the number, use ~for _ToIterator Embedded~. _ToIterator may be an expression as well. Note that ranges
+(~[a..b]~) implement the ToIterator interface, so ~for [..7]~ will execute 7 times.
+
+~break~ and ~loop~ are allowed and same as in ~while~.
+** Switch
+Switching can be done over any expression:
+
+#+begin_src cease
+  switch Expression <<
+      variant1: CaseBlock;
+      variant2:
+          CaseBlock;
+      >>;
+#+end_src
+
+The ~CaseBlock~ terminates with a ~yield~ and is not surrounded by braces. ~_~ is used as a wildcard. Switches
+must be exhaustive. Switching over enums doesn't require the ~--~ operator.
+
+#+begin_src cease
+  enum Colour {
+  	 green,
+  	 red,
+  	 rgb{ r: int, g: int, b: int },
+  }
+
+  new colour: Colour = Expr;
+  new name: word = switch colour <<
+  	 --green: yield "green";
+  	 --red: yield "red";
+  	 --rgb { r, g, b: blue}:
+  		 new prefix = "RGB_"
+  		 yield `{}{}{}{}` $ r g blue;
+       >>;
+#+end_src
+
+~cascade~ is also allowed, and it will terminate this ~switch~ and any number of ~switch~ or ~if~ blocks into
+which it's nested until it reaches a procedure or a global variable or a for/while loop. ~break~ and ~loop~
+also work, and they terminate the current ~switch~ and the external for/while into which the switch is
+wrapped.
+** Case
+The ~case~ block is used as a special ~switch~ with only one case:
+
+#+begin_src cease
+  case --variant = variable:
+	 yield something;
+#+end_src
+
+If ~variable~ is ~void~, the ~case~ body doesn't evaluate. That can happen when ~variable~ is ~may~, i.e.,
+~may int~. This is hard-coded into the compiler as a special case because the maybe attribute doesn't create
+an enum.
+
+~cascade~, ~break~, and ~loop~ also work.
+* Error Handling
+Errors are structs defined natively in the compiler:
+
+#+begin_src cease
+  struct Error<A> {
+  	messages: ...string,
+  	base: A,
+  }
+#+end_src
+
+The ~A~ constraint is evaluated dynamically at compile time. It is an enum of all possible types which can be
+"thrown" from all functions in the call stack.
+
+To indicate a procedure can fail, use the ~err~ type annotation: ~func :: arg -> err Type~
+
+In the compiler the ~err A~ is an enum, but there is no error enum available in Cease. For that reason there
+is a set of built-in pipes and primitives which work with ~err A~​s. The base primitive is ~??~ which follows
+an expression of type ~err A~ and either turns it into ~A~ or returns the error with the same base and
+an appended message: ~failingExpr ?? "failed to do X"~. This can be used in a pipe as well:
+
+#+begin_src cease
+  variable
+  | pipe1 arg ?? "message"
+  | pipe2     ?? "message";
+#+end_src
+
+There is also the ~fail~ keyword which returns a provided error base and a base message: ~fail errVal
+"message"~. Other pipes exist to wrap these two primitives.
+* Debugging
+The ~___~ operator can be used to print the value at the end of a line:
+
+#+begin_src cease
+  value
+  | pipe1 arg ___         // Prints the result of this pipe
+  | pipe2 args args args 
+  | pipe3; ___            // Prints the final result
+#+end_src
+
+You can also print (using the built-in ~say~ keyword like ~say variable;~ or ~say `value is {}` $ variable~
+where ~`...`~ creates a closure and every ~{}~ inside is an argument.
+
+When code is built for release, ~___~ is ignored. Before the code is built for release, an equivalent of ~say~
+exists: ~debug~. ~say~ is always observed, as is ~sayif <bool> <formatted-str>~. There's also a ~debufif~.
+
+All these end with a newline. ~print~ and ~printif~ don't not end in a newline but are otherwise identical to
+~say~ and ~sayif~.
+* [0/1] Package Management
+Code is split into modules and packages. A module is a file, a package is a directory. Not all directories are
+packages, though all modules must be in a package. That means a package directory may have subdirectories
+which aren't packages.
+
+All packages except =main= have a =package.stop= file where the package is declared. The package file defines
+the exported symbols from the package's modules. When the package is imported, you can either import the whole
+thing, or individual symbols defined in the package file. If a field of an exported struct or data needs to be
+private, prepend it with keyword ~sec~ for "secret."
+
+All =.stop= files inside a package belong to the package. They needn't be declared with some =package= or
+=module= keyword at the top.
+
+Whether a symbol (function, pipe, type, etc.) is exported is written inside the package file, not in the code.
+You may also provide additional documentation there. This way users of a package can see all the package's API
+in a single place, and not be bothered by all the code that implements that API. Documentation anywhere is
+done in markdown in a block surrounded on each side by ~===~, such as ~=== this is a function ===~.
+
+Packages must have unique names in the project. You can separate them by =/=. They do /not/ need to be file
+paths, in fact it's discouraged because changes to the file structure fucks you up if that's the case. It's
+therefore recommended that the sections of the package name are tags rather than directories.
+
+This is what a =package.stop= might look like:
+
+#+begin_src cease
+  ===
+  Package documentation
+  ===
+  package package/name; // this is the name other packages must import
+
+  // List the exported types. The syntax is the same whether they're structs,
+  // enums, types, or aliases.
+
+  type SomeType;
+  ===
+  Documentation for OtherType.
+  ===
+  type OtherType;
+
+  // List the exported interfaces.
+
+  interface SomeInter;
+  interface OtherInter;
+
+  // List the exported procedures. Functions and pipes are all the same.
+
+  fn SomeFunc;
+  fn SomePipe;
+#+end_src
+
+When importing a package/symbol, use the ~use~ keyword:
+
+#+begin_src cease
+  use package/name;                    // symbols therein are now accessible under name:symbol
+  use privateName = otherPackage/name; // give the import a name
+  use package/name *;                  // Import all symbols natively.
+  use package/name symbol1 symbol2;    // Import package name, and symbol1 and symbol2 from it. No need for `self`.
+  use otherPackage/name privateSymbol1 = symbol1, privateSymbol2 = symbol2;
+#+end_src
+
+You cannot use packages directly in the code without the ~use~ keyword like ~package/name:function~. This
+would conflict with division.
+
+You don't need to define the package for the =main= package - it's explicit and also nothing is exported. Only
+items ~use~​d in =main= or dependencies thereof are built.
+
+Using the package is done either by the given name ~privateName~ or by the last element of the path, so
+~name~. Imported symbols can be but don't need to be used directly, so ~symbol1~ and ~name:symbol1~ are both
+allowed.
+** Modules
+Inside a packages, each file is a module. Modules of a package do not have a visibility over other modules but
+they can see the package file. To indicate that a symbol is exported for the package's modules but not for
+other packages, make it a ~sec~ in the =package.stop= file: ~sec fn someFunc;~.
+
+To indicate on a struct or data field that this package can see it but other packages cannot, use ~pkg~ before
+the field.
+** TODO [0/15] Core Packages
+*** TODO OS-interaction
+stderr, in, out, command line, exit codes, process IDs, env variables
+*** TODO File
+file, path, file system
+*** TODO Time
+*** TODO Buffers
+*** TODO Strings
+unicode, case conversion, builder, utilities, formatting
+*** TODO Maths
+random numbers, bit operations
+*** TODO Atomic primitives
+*** TODO async
+channels, future/promise, semaphore
+*** TODO data manipulation
+json, yaml, binary, base64
+*** TODO SQL
+base DB integration
+*** TODO errors
+error type, error pipes
+*** TODO network
+sockets, tcp, udp, url, http, https, tls, request, response, headers (but good ones).
+*** TODO testing
+test utilities
+*** TODO reflection
+*** TODO collections
+list, map, vector, array, set, generic buffer (for byte array and string builder etc maybe?), iterators, stream
+* Access Modes
+** Data Access
+Fields of a struct can be accessed in order to get their value. This is done through the classic ~.~ operator:
+~struct.field~.
+** Field Access
+Type definitions (enums, structs, aliases, and types) create not only the type for other variables to use, but
+a special object which is itself a value - the type definition is an expression. The value is of type ~Type~
+which contains metadata about the defined type.
+
+A type can be pure indicated by the ~%~ operator (~%SomeType~) or constrained (~Type<SomeType>~). The
+constrained version is useful for generic types: ~[A: _Interface] func :: typeArg: Type<A>~. You can also pass
+the ~Type~ object, unconstrained, on its own. This means the variable is very generic, used e.g. for static
+analysis: ~new a: Type = SomeType;~.
+
+You can access field of a type via the ~=>~ operator. This returns an object of a ~Field~ type. ~Field~ is
+constrained by the parent type, and contains the ~Type~ field:
+
+#+begin_src cease
+  struct [Parent: Type] Field<Parent> {
+    fieldType: Type
+    ...
+  }
+
+  struct FieldType {}
+
+  struct ParentType {
+    field: FieldType
+  }
+
+  new field: Field<ParentType> = ParentType=>field;
+  new fieldType: Type = field.fieldType;
+#+end_src
+
+You can pass fields as arguments: ~func :: arg: Field<SomeType>:~. This expects /any/ field of ~SomeType~, we
+don't know which.
+
+In addition to ~=>~, you can use the ~field~ pipe:
+
+~%A | field :: Field<A> -> field-of-A~
+
+This is a built-in pipe which determines the return value at compile time by
+which field is passed:
+
+#+begin_src cease
+  new t = SomeType;
+  new f1: string = t | field SomeType=>strField;
+  new f2: int = t | field SomeType=>intField;
+#+end_src
+** Package Access
+To access a symbol of an imported package, use the ~:~ operator: ~package:symbol~.
+** Associated Functions
+In some languages the concept of an associated function exists whereby as function (not a method) is tied to a
+type. That function must be accessed through the type (think Rust's ~Type::func()~). In Cease we don't have
+that, but we do have /pure type pipes/ which are chill pipes whose payload is not a variable of type ~A~ by
+the type ~A~ itself. This is a deeply reflexive concept and will be discussed in the chapter on reflection.
+* TODO Async
+* Precedence
+** Operator Precedence
+Control flow:   =, <-, :, return, yield, break, loop, cascade
+Application:    |, |>, $
+Injectors:      ??, ___
+Equality:       =​=, !​=
+Logic:          and, or, nand, xor, ||, &&
+Comparison:     <, >, <​=, >​=
+Addition:       +, -
+Multiplication: *, /, %, ^
+Unary:          not, !, -, *, &, ~, rlock, wlock, unlock
+Access:         :, ., =>
+Grouping:       (...), [...]
+** Annotation Precedence
+err may ark (ptr | mut | ref) itr into
+
+Since these are annotations of the same type rather than new types, there is a set precedence for how they are
+applied. You can have a failing maybe type (either error or a nullable value), but not a maybe failing type
+(either nullable error or a nullable value). That's just how it goes. Deal with it.
+* Reflection
+A type definition (enum, interface, struct, data, type, alias, all of them) creates a constant object which
+can be used as a value. The type of this object is the built-in ~Type~.
+** Reflexive ~Type~, ~Field~, ~Variable~
+Constant objects generated by type definitions are all of the ~Type~ type. There are only a few cases where
+~Type~​s would be held by variables. One such is during static analysis, where you could have an argument
+~func :: type_: Type~. To pass that value to the function, you just use the name of the type:
+~func $ MyStruct~.
+
+~Type~ contains information about the type like name, fields, annotations if they are available, etc. For
+interfaces it contains all types which implement it (~implementations: ...Type~), for those types it contains
+the reverse list (~implements: ...Type~).
+
+~Type~ is an enum with a variant for each type king e.g. struct, enum, interface, and so on.
+
+The ~Field<#A>~ type is a reflection type which describes a field of a type. It can be a variant (for enums),
+or field (for data or structs). It is parameterised by the type whose field it describes. To get a ~Field~
+type, use the field access operator: ~MyStruct=>fieldName~. ~Field~ is an enum like ~Type~ is. ~Field~​s of
+structs or data of course have a ~type: Type~ field describing the type of the field.
+
+The ~Variable~ reflexive type describes a variable, which in practice means it holds its ~Type~ and its
+current value. To get a ~Variable~ from a variable, use the ~\~ operator:
+
+#+begin_src cease
+  struct MyStruct {
+      field: int,
+  }
+
+  new myStruct: MyStruct = MyStruct << field: 8 >>;
+  new myType: Type = MyStruct;
+  new myField: Field<MyStruct> = MyStruct=>field;
+  new myVar: Variable = \myStruct;
+  new fieldVar: Variable = \mystruct.field;
+#+end_src
+
+Some built-in operations exist to interact with these types. The most obvious are ~field~ and its related
+pipes.
+
+#+begin_src cease
+  ===
+  Returns the value of the field given by `field` of the payload.
+  The return type is computed during compile time from `field`.
+  ===
+  #A | field :: field: Field<A> -> ??
+
+  ===
+  Sets the value of the `field` of payload to `newVal` and emits the
+  old value of the field.
+
+  The types of `newVal` and `oldVal` must match. They are computed at
+  compile time.
+  ===
+  #A | setField :: field: Field<A>, newVal: ?? -> oldVal: ??
+
+  ===
+  Performs operation `map` on the field `field`, returns the result.
+  ===
+  #A | mapField :: field: Field<A>, map: (??) => #B -> B
+
+  === Performs operation `op` on the `field` of self. ===
+  #A | onField :: field: Field<A>, op: (??):
+      return self | mapField field (fieldVal) {
+          op $ fieldVal;
+          return void;
+      };
+#+end_src
+** Properties
+Fields of the 'data' type, as well as the data itself, may be given metadata which dictate how they operate.
+Such metadata is controlled by /properties/. A property is a key or a key-value pair. Properties are checked
+at compile time.
+
+A simple example of a property is the ~json~ one. This dictates what Json field the field should be translated
+to. The property would be written as ~json:fieldName~ where ~json~ is the key and ~fieldName~ is the value.
+When translated into json, the field will be called ~fieldName~.
+
+Property values (such as ~fieldName~) are typed. This means the value must conform to a specified type (in
+this case a string). Primitive types can be used, with two exceptions: words needn't be quoted, and booleans
+needn't be supplied at all - either the field has the property, or it does not, though something like
+~apiSettable:true~ is possible. The values can also be enums and function/variable names (given the type
+~name~).
+
+For the [[*Database Integration and the Desist Sub-language][Desist sub-language]] (for DB integration), some properties with special types are reserved (such as a
+~foreignKey~ property with a ~Field<#A>~ type.
+
+To define a new property, we use the ~prop~ keyword. This functions as the ~type~ keyword:
+
+#+begin_src cease
+  prop json word;        // json:firstName
+  prop description line; // description:"This is a multi-word description"
+  prop apiSettable bool; // apiSettable OR apiSettable:true
+
+  #A | authentication :: -> err A = ...
+  prop auth name; // auth:authentication
+
+  // In package dbStuff:
+  enum ReplicationType {
+      replicate,
+      local,
+      global,
+  }
+  // In another package:
+  prop replication dbStuff:ReplicationType; // replication:--local
+#+end_src
+
+You can also assign properties to the 'data' type as a whole.
+
+Properties of 'data' types are stored inside of the ~Type~ struct. Like the rest of the ~Type~, this is
+constructed at compile time, and therefore only contains such properties as are declared on the type. The same
+goes for field properties and the ~Field~ struct.
+** Pure Type Pipes
+It is possible to define a pipe not on a value of type ~A~ but on the type ~A~ itself, that is on the
+reflexive value which is created by the type definition. To indicate that the payload isn't a variable but a
+type, we use the ~%~ operator: ~%A~. This is called a "pure type."
+
+Free type pipes are pipes with a free type payload. They are sort of associated functions which can be used
+e.g. for constructors.
+
+#+begin_src cease
+  struct MyStruct {
+      field: string,
+  }
+
+  %MyStruct | make :: field: string -> MyStruct:
+      return MyStruct << field >>;
+
+  // Note we don't need to use % when using the free type.
+  new myStruct = MyStruct | make "field";
+#+end_src
+* TODO Database Integration and the Desist Sub-language
+* COMMENT File config
+#  LocalWords:  config unfontified centric untyped Json monadic struct async Structs Enums src pointerVar
+#  LocalWords:  whitespace natively speeeeed nullability enum unowned structs enums Yaml prepended prepend
+#  LocalWords:  subdirectories Proto nullable Toml TODO booleans
+
+# Local variables:
+# org-adapt-indentation: nil
+# org-yank-adjusted-subtrees: nil
+# fill-column: 110
+# eval: (flyspell-mode 1)
+# eval: (auto-fill-mode 1)
+# End:
