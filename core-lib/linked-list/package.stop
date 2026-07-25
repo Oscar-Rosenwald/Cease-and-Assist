@@ -1,0 +1,15 @@
+package core/linkedList;
+
+type LinkedList<#A>;
+
+fn make;
+fn last;
+fn append;
+fn prepend;
+fn find;
+fn insertAfter;
+fn update;
+fn locate;
+fn contains;
+fn forEach;
+fn fold;

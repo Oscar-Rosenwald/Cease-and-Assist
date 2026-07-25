@@ -1,0 +1,75 @@
+struct LinkedList<#A> {
+	sec value: A,
+	sec next: may ptr Self,
+}
+
+
+%LinkedList<#A> | make :: value: A -> ptr LinkedList<A>:
+	heap list = LinkedList << value, next: void >>;
+	return list;
+
+
+mut LinkedList<#A> | last :: -> mut LinkedList<A>:
+	if self.next | isVoid:
+		return self;
+	return self.next | unvoid | last;
+
+
+mut LinkedList<#A> | append :: value: A -> Self:
+	new newValue = LinkedList | make value;
+	self | last | setField LinkedList=>next newValue;
+	return self;
+
+
+ptr LinkedList<#A> |> prepend :: value: A -> Self:
+	new newNode = LinkedList | make value;
+	old newNode.next = self;
+	return newNode;
+
+
+mut LinkedList<#A> | find :: value: A -> may Self:
+	if self.value == value: return self;
+	if self.next | isVoid: return void;
+	return self.next | unvoid | find value;
+
+
+mut LinkedList<#A> | insertAfter :: newValue afterValue: A -> bool:
+	new afterNode = self | find afterValue | ifvoid { return false };
+	new newNode = LinkedList | make newValue;
+	old newNode.next = afterNode.next;
+	old afterNode.next = newNode;
+	return true;
+
+
+mut LinkedList<#A> | update :: from to: A -> bool:
+	new targetNode = self | find from | ifvoid { return false };
+	old targetNode.value = to;
+	return true;
+
+
+ref LinkedList<#A> | locate :: value: A -> may Self:
+	if self.value == value: return self;
+	if self.next | isVoid: return void;
+	return self.next | locate value;
+
+
+ref LinkedList<#A> | contains :: value: A -> bool = self | locate | isValue;
+
+
+ref LinkedList<#A> | forEach :: operation: (ref A) => err void: err void
+	new current = self;
+	operation $ &current.value ?? "Operation vailed";
+	return while not (current.next | isvoid):
+		old current = current.next | unvoid;
+		loop operation $ &current.value ?? "Operation vailed";
+
+
+ref LinkedList<#A> | fold ::
+	base: #B,
+	accumulate: (newValue ref A, folded B) => err B
+-> err B:
+	new folded = accumulate(self.value, base) ?? "Fold failed";
+	if self.next | isvoid: return folded;
+	return self.next
+	  | unvoid
+	  | fold accumulate folded;

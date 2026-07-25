@@ -22,6 +22,14 @@
    '((comment) @font-lock-comment-face)
 
    :language 'cease
+   :feature 'doc
+   '((documentation) @icon-button)
+
+   :language 'cease
+   :feature 'property
+   '((field name: (identifier) @font-lock-property-use-face))
+
+   :language 'cease
    :feature 'string
    '((string) @font-lock-string-face
      (char) @font-lock-string-face)
@@ -51,6 +59,7 @@
    :language 'cease
    :feature 'operator
    '((operator) @font-lock-builtin-face
+	 (field operator: _ @font-lock-builtin-face)
      (punctuation) @font-lock-delimiter-face)
    ))
 
@@ -208,11 +217,11 @@
   (when (treesit-ready-p 'cease)
     (treesit-parser-create 'cease)
     (setq-local treesit-font-lock-settings cease-ts-mode--font-lock-settings)
-    (setq-local treesit-font-lock-feature-list
-                '((comment string)
-                  (keyword type constant)
-                  (function)
-                  (operator)))
+	(setq-local treesit-font-lock-feature-list
+				'((comment keyword constant)
+				  (string type)
+				  (property operator)
+				  (function variable)))
 	(setq-local indent-line-function #'cease-indent-line)
     (treesit-major-mode-setup)))
 

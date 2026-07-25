@@ -5,6 +5,46 @@
     "fields": {}
   },
   {
+    "type": "comment",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "documentation",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "field",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "operator": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": ".",
+            "named": false
+          },
+          {
+            "type": "=>",
+            "named": false
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "func_usage",
     "named": true,
     "fields": {
@@ -81,6 +121,10 @@
       "required": true,
       "types": [
         {
+          "type": "keyword",
+          "named": true
+        },
+        {
           "type": "operator",
           "named": true
         }
@@ -106,6 +150,14 @@
         },
         {
           "type": "char",
+          "named": true
+        },
+        {
+          "type": "documentation",
+          "named": true
+        },
+        {
+          "type": "field",
           "named": true
         },
         {
@@ -318,6 +370,10 @@
     "named": false
   },
   {
+    "type": "===",
+    "named": false
+  },
+  {
     "type": "=>",
     "named": false
   },
@@ -422,19 +478,7 @@
     "named": true
   },
   {
-    "type": "comment",
-    "named": true
-  },
-  {
     "type": "const",
-    "named": false
-  },
-  {
-    "type": "debug",
-    "named": false
-  },
-  {
-    "type": "debugif",
     "named": false
   },
   {
@@ -463,6 +507,10 @@
   },
   {
     "type": "float",
+    "named": false
+  },
+  {
+    "type": "fn",
     "named": false
   },
   {
@@ -550,14 +598,6 @@
     "named": false
   },
   {
-    "type": "print",
-    "named": false
-  },
-  {
-    "type": "printif",
-    "named": false
-  },
-  {
     "type": "prop",
     "named": false
   },
@@ -578,28 +618,16 @@
     "named": false
   },
   {
-    "type": "say",
-    "named": false
-  },
-  {
-    "type": "sayif",
-    "named": false
-  },
-  {
     "type": "sec",
-    "named": false
-  },
-  {
-    "type": "set",
-    "named": false
-  },
-  {
-    "type": "string",
     "named": false
   },
   {
     "type": "string",
     "named": true
+  },
+  {
+    "type": "string",
+    "named": false
   },
   {
     "type": "struct",

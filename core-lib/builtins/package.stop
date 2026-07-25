@@ -1,0 +1,40 @@
+===
+Provides the builtin primitives as a package.
+===
+package builtin;
+
+type void;
+type bool;
+type char;
+type string;
+type line;
+type word;
+type int;
+type float;
+type list<#A>;
+type range;
+type Program;
+pkg type Embedded;
+type Type<#A>;
+type Field<#Parent>;
+
+=== say :: msg: string ===
+fn say;
+=== sayif :: condition: bool, msg: string ===
+fn sayif;
+=== print :: msg: string ===
+fn print;
+=== printif :: condition: bool, msg: string ===
+fn printif;
+=== debug :: msg: string ===
+fn debug;
+=== debugif :: condition: bool, msg: string ===
+fn debugif;
+=== #A | field :: f: Field<A> -> mut type-of-field ===
+fn field;
+=== #A | setField :: f: Field<A>, setTo: type-of-field -> old-field-value ===
+fn setField;
+=== may #A | nomaybe :: -> A ===
+fn unvoid;
+=== may #A | isVoid :: -> bool ===
+fn isvoid;

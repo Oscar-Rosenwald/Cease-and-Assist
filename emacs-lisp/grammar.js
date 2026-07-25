@@ -12,9 +12,11 @@ module.exports = grammar({
   rules: {
     source_file: $ => repeat($._item),
 
-    comment: $ => token(seq('//', /.*/)),
+    comment: $ => prec(4, token(seq('//', /.*/))),
 
     _item: $ => choice(
+	  $.field,
+	  $.documentation,
       $.procedure_definition,
       $.type_usage,
 	  $.type_identifier,
@@ -33,11 +35,27 @@ module.exports = grammar({
       $.identifier
     ),
 
+	// Match any chunk of characters that aren't equal signs (including newlines)
+	_doc_content: $ => repeat1(choice(/[^=]+/, '=', '==')),
+
+	documentation: $ => prec(5, seq('===', optional($._doc_content), '===')),
+
+	field: $ => seq(
+	  field('operator', choice('.', '=>')),
+	  field('name', $.identifier)
+	),
+
     // Catches functions and pipes: someFunc :: ...
-    procedure_definition: $ => prec(4, seq(
-	  optional(alias(choice('|', '|>'), $.operator)),
-	  field('name', $.identifier),
-	  alias(choice('::', ':::'), $.operator)
+    procedure_definition: $ => prec(4, choice(
+	  seq(
+		optional(alias(choice('|', '|>'), $.operator)),
+		field('name', $.identifier),
+		alias(choice('::', ':::'), $.operator)
+	  ),
+	  seq(
+		alias('fn', $.keyword),
+		field('name', $.identifier),
+	  )
 	)),
 
 	func_usage: $ => prec(3, seq(
@@ -68,8 +86,8 @@ module.exports = grammar({
     keyword: $ => choice(
       'new', 'old', 'heap', 'const',
       'if', 'else', 'while', 'for', 'in', 'switch', 'case',
-      'fail', 'say', 'sayif', 'debug', 'debugif', 'print', 'printif',
-      'use', 'package', 'default', 'set',
+      'fail', 'sec', 'pkg',
+      'use', 'package', 'default', 'fn',
 	  'struct', 'type', 'interface', 'alias', 'enum', 'prop', 'impl'
     ),
 
@@ -83,19 +101,19 @@ module.exports = grammar({
     ),
 
     modifier: $ => choice(
-      'into', 'fun', 'may', 'itr', 'err', 'ark', 'ptr', 'mut', 'ref', 'sec', 'pkg'
+      'into', 'fun', 'may', 'itr', 'err', 'ark', 'ptr', 'mut', 'ref'
     ),
 
     boolean: $ => choice('true', 'false'),
 
     operator: $ => prec(2, choice(
-      '=', '<-', '|', '|>', '$', '->', '=>', '??', '___',
+      '=', '<-', '|', '|>', '$', '->', '??', '___',
       '==', '!=', '<', '>', '<=', '>=', '+', '-', '*', '/', '%', '^',
       '!', '~', '&', '\\', '?', '#', '@', '--', '<<', '>>', ':', '::', ':::'
 	)),
 
     punctuation: $ => choice(
-      ';', ':', ',', '.', '{', '}', '[', ']', '(', ')'
+      ';', ':', ',', '{', '}', '[', ']', '(', ')'
     ),
 
     string: $ => token(choice(
