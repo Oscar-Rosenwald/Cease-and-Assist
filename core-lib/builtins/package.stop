@@ -14,9 +14,9 @@ type float;
 type list<#A>;
 type range;
 type Program;
-pkg type Embedded;
 type Type<#A>;
 type Field<#Parent>;
+pkg type Embedded;
 
 === say :: msg: string ===
 fn say;

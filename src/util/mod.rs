@@ -4,5 +4,6 @@
 pub mod error;
 pub mod location;
 
+pub use error::Error as CeaseError;
 pub use error::*;
 pub use location::*;

@@ -23,7 +23,7 @@
 
    :language 'cease
    :feature 'doc
-   '((documentation) @font-lock-doc-face)
+   '((documentation) @shell-highlight-undef-alias-face )
 
    :language 'cease
    :feature 'property
@@ -218,7 +218,7 @@
     (treesit-parser-create 'cease)
     (setq-local treesit-font-lock-settings cease-ts-mode--font-lock-settings)
 	(setq-local treesit-font-lock-feature-list
-				'((comment keyword constant)
+				'((comment doc keyword constant)
 				  (string type)
 				  (property operator)
 				  (function variable)))

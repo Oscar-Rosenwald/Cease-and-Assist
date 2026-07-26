@@ -15,8 +15,8 @@ type FileName = std::path::PathBuf;
 ///
 /// `1` has the line-number `1:1`, and `9` has line-number `1:9`. The newline at
 /// the end of the line has line-number `1:11`.
-#[derive(Debug)]
-struct FileLocation {
+#[derive(Debug, Clone)]
+pub struct FileLocation {
     /// Indexed from 1.
     line: usize,
     /// Indexed from 1.
@@ -26,11 +26,33 @@ struct FileLocation {
 /// A set of coordinates of a file. This can define any amount of text, one
 /// character long or larger. This can be used to report e.g. errors in a series
 /// of tokens.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Position {
     file: FileName,
     start_position: FileLocation,
     end_position: Option<FileLocation>,
+}
+
+impl Default for FileLocation {
+    fn default() -> Self {
+        Self { line: 1, column: 1 }
+    }
+}
+
+impl FileLocation {
+    pub fn new(line: usize, column: usize) -> Self {
+        Self::validate(line, column);
+        Self { line, column }
+    }
+
+    fn validate(line: usize, column: usize) {
+        if line < 1 {
+            panic!("Cannot have line have a value < 1, have {line}");
+        }
+        if column < 1 {
+            panic!("Cannot have column have a value < 1, have {column}");
+        }
+    }
 }
 
 impl std::fmt::Display for Position {
@@ -78,6 +100,14 @@ impl Position {
         }
     }
 
+    pub fn new_location(file: FileName, location: FileLocation) -> Self {
+        Self {
+            file,
+            start_position: location,
+            end_position: None,
+        }
+    }
+
     /// Constructs a Position with no end file and line.
     pub fn new_point(file_name: FileName, line: usize, column: usize) -> Self {
         Self {
@@ -85,6 +115,44 @@ impl Position {
             end_position: None,
             start_position: FileLocation { line, column },
         }
+    }
+
+    /// Constructs a Position from the start and end.
+    pub fn new_start_end(file_name: FileName, start: FileLocation, end: FileLocation) -> Self {
+        Self {
+            file: file_name,
+            start_position: start,
+            end_position: Some(end),
+        }
+    }
+
+    pub fn merge(self, other: Self) -> Self {
+        if self.start_position.line < other.start_position.line {
+            return Self {
+                file: self.file.clone(),
+                start_position: self.start_position,
+                end_position: other.end_position,
+            };
+        }
+        if self.start_position.line > other.start_position.line {
+            return Self {
+                file: self.file.clone(),
+                start_position: other.start_position,
+                end_position: self.end_position,
+            };
+        }
+        if self.start_position.column < other.start_position.column {
+            return Self {
+                file: self.file.clone(),
+                start_position: self.start_position,
+                end_position: other.end_position,
+            };
+        }
+        return Self {
+            file: self.file.clone(),
+            start_position: other.start_position,
+            end_position: self.end_position,
+        };
     }
 
     /// Panics if any of the arguments are below 1. This is because

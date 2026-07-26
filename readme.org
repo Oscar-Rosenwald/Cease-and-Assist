@@ -56,7 +56,7 @@ variable of a new type, which makes the old value go out of scope.
 
 Variables can be global (on the module level - see later for modules and packages), or local to a procedure.
 
-#+begin_src cease
+#+begin_src cease-ts
   // Basic variables on the stack
   new stackVar = 7;
   old stackVar = 8;
@@ -141,7 +141,7 @@ input and no output. ~Program~​s are mostly used by the core library.
 
 Programs are created by braces:
 
-#+begin_src cease
+#+begin_src cease-ts
   expression;
   expression;
   functionCall $ {
@@ -155,7 +155,7 @@ An ~Embedded~ type is used by the core library and not exported because it's too
 It's a type of ~Program~ which is executed in the caller's stack. It's used mostly for early returns. Pipes
 such as ~ifer~ use the ~Embedded~ type so that the caller can do:
 
-#+begin_src cease
+#+begin_src cease-ts
   someFailingOp | ifer return false;
   // Continue function if not error.
 #+end_src
@@ -166,7 +166,7 @@ and is the last bit of the expression (such as in the example, i.e., followed by
 wrapped in braces at all. By contrast, here we still have a single terminator, but there is more to follow in
 the expression, so we must wrap the ~Embedded~ block:
 
-#+begin_src cease
+#+begin_src cease-ts
   someFailingOp
     | iferr { return false; }
     | pipeCall;
@@ -175,7 +175,7 @@ the expression, so we must wrap the ~Embedded~ block:
 When defining interfaces, we may use the ~Self~ type as a generic type which will be resolved to the concrete
 type implementing the interface. Interfaces are discussed later, so this is just for completeness.
 
-#+begin_src cease
+#+begin_src cease-ts
   interface SomeInter {
       // Here "Self" means "the type which implements SomeInter"
       Self | somePipe :: -> Self;
@@ -231,7 +231,7 @@ out of scope (ignore the ~|>~ for now and just accept it).
 
 "Ark" is called ark as in a chest, as in something lockable that has a treasure in it.
 
-#+begin_src cease
+#+begin_src cease-ts
   new lockedInt: ark int = 8 | lock;
 
   new readRef = lockedInt | rlock; // readRef is a read-only pointer AKA a "reference"
@@ -274,7 +274,7 @@ as well. The returned reference's lifetime is tied to that of the payload, and t
 scope when the payload does. This means references can be returned only from chill pipes since grabby pipes
 consume their payloads which would make the returned reference immediately freed. Example:
 
-#+begin_src cease
+#+begin_src cease-ts
   ref ...#A | find :: match: (ref A) => bool -> may ref A:
       for element in self | iterRefs :
           loop if match $ element: return elemenent;
@@ -297,14 +297,14 @@ form as ~ExistingType~ and inherit all its properties and pipes, fields etc., bu
 in its own right. Pipes defined on ~NewType~ are not defined on ~OldType~. The built-in string variants ~word~
 and ~line~ are both inherited types:
 
-#+begin_src cease
+#+begin_src cease-ts
   type line string;
   type word string;
 #+end_src
 
 The difference between aliases and inherited types is best shown by an example:
 
-#+begin_src cease
+#+begin_src cease-ts
   // Define one alias and one inheritted type
   alias AliasString;
   type NewString string;
@@ -335,7 +335,7 @@ For clarity, when using enums as types (rather than for declarations), we prepen
 practice this means inside of other type definitions (e.g. struct fields might be of type ~@Colour~) or
 procedure definitions (a function returns a ~@Colour~).
 
-#+begin_src cease
+#+begin_src cease-ts
   type ColourSpan int; // Must be 0-255
 
   enum Colour {
@@ -380,7 +380,7 @@ For this reason, structs are very simple to define and declare. As with other ty
 definition is wrapped in braces but the declaration, which must be exhaustive, is surrounded by double
 chevrons ~<< ... >>~.
 
-#+begin_src cease
+#+begin_src cease-ts
   struct MyStruct {
       field1: word,
       field2: into int,
@@ -408,7 +408,7 @@ Data is a kind of struct with extra, *extra* metadata. Data types are the main s
   that data. This will also require/forbid some field properties tied to the trait.
 #+END_TODO
 
-#+begin_src cease
+#+begin_src cease-ts
   base data user {
       identifier Uuid {
           primaryKey
@@ -502,9 +502,9 @@ Data is a kind of struct with extra, *extra* metadata. Data types are the main s
   prop proto bool;
   prop json bool;
   prop db bool;
-  prop version Version;
+  prop version @Version;
   prop reason line;
-  prop since Release;
+  prop since @Release;
 
   enum Version {
       v1,
@@ -544,7 +544,7 @@ prepend ~_~ to the interface name to indicate it's an interface.
 Implementations of interfaces are done via the ~impl~ keyword before the name of the pipe you're implementing.
 Ignore the pipe syntax, that'll come later.
 
-#+begin_src cease
+#+begin_src cease-ts
   interface StringReader {
       // Reads string from somewhere, returns an error on failure, returns void
       // when done. This pipe must be implemented.
@@ -599,7 +599,7 @@ type annotations with generics freely.
 Generics may be limited to a class of types. A class of types is represented by an interface. To indicate
 this, we put a class block at the beginning of the scope:
 
-#+begin_src cease
+#+begin_src cease-ts
   #A | somePipe :: ... // Pipe which works with absolutely any type
 
   [A: _ToString] A | otherPipe :: ... // Pipe which works with any type which implements _ToString.
@@ -648,7 +648,7 @@ Functions take any number of (named) arguments and return any number of (optiona
 written in a one line shorthand or in long form. They are terminated by the ~return~ keyword, even if they
 return nothing (such functions return ~void~ implicitly).
 
-#+begin_src cease
+#+begin_src cease-ts
   onelineFunc :: arg: Type -> ReturnType = ReturnType << ... >>;
 
   multilineFunc :: arg1: Type1, arg2 arg3: Type2 -> ret1: RetType1, RetType2:
@@ -665,13 +665,13 @@ Some special cases:
 - If the function has no arguments, we use ~:: -> RetType:~.
 - If the function has no return value, we use ~:: arg: Type:~.
 - If the function returns nothing and has no arguments, we can use ~:::~.
-  #+begin_src cease
+  #+begin_src cease-ts
     noReturnFunc :::
       doStuff;
       return;
   #+end_src
 - If the function returns ~void~, we can put anything after ~return~ without actually returning anything:
-  #+begin_src cease
+  #+begin_src cease-ts
     noReturn :: arg: string:
         return arg; // Doesn't return arg but ends the function nonetheless.
   #+end_src
@@ -679,7 +679,7 @@ Some special cases:
 Calling a function is done through the ~$~ operator, which is one of the ways that functions and pipes are
 differentiated when used.
 
-#+begin_src cease
+#+begin_src cease-ts
   returnSelf :: arg: #A, ignored: #B -> A:
       return arg;
 
@@ -688,7 +688,7 @@ differentiated when used.
 ** Closures
 There's nothing strange about closures in Cease except how they're declared:
 
-#+begin_src cease
+#+begin_src cease-ts
   // Named closure
   new closure1: (string) => string = (arg: string) -> string {
       return "string";
@@ -740,7 +740,7 @@ If the pipe is chill, the payload must for obvious reasons be ~ref~ or ~mut~ or 
 
 Pipes are used to implement interfaces. An interface can contain only pipes, and indicates the pipe kind.
 
-#+begin_src cease
+#+begin_src cease-ts
   #A |> grabbyMap :: morph: (A) => #B -> B = morph $ self;
 
   ref #A | chillMap :: morph: (ref A) => #B -> B = morph $ self;
@@ -763,7 +763,7 @@ Pipes are used to implement interfaces. An interface can contain only pipes, and
 Pipes can be evaluated without the payload, which returns a closure. This is particularly useful when a
 procedure expects a closure and we have a pipe ready for that purpose.
 
-#+begin_src cease
+#+begin_src cease-ts
   int | pipe :: arg: string -> char = ...;
 
   new pipeClosure: (int) => char = pipe "string";
@@ -786,7 +786,7 @@ as well as terminating the blocks.
 Some blocks may never get to compute a value (e.g. a while block which may not run its body at all). Those
 return ~may A~. Other (if-else) return reliably, so evaluate to some ~A~.
 ** If
-#+begin_src cease
+#+begin_src cease-ts
   // Flat
   new val: int = if Expr:
       yield 0;
@@ -818,12 +818,12 @@ Using ~break~ will return from the while loop with a value. Using ~loop~ is the 
 trigger a new condition check. If this fails, the expression given to ~loop~ is used as the resulting value of
 the while block.
 
-#+begin_src cease
-  while Expr {
-	 do shit
-  }
+#+begin_src cease-ts
+  while Expr:
+  	 do_shit
+  	 yield Expr;
 
-  new var: may int = while a < 10 loop a;
+  new var: may int = while a < 10: loop a;
 #+end_src
 
 A while block always returns ~may A~. In the example above where while is used as an expression, it will
@@ -837,7 +837,7 @@ about the number, use ~for _ToIterator Embedded~. _ToIterator may be an expressi
 ** Switch
 Switching can be done over any expression:
 
-#+begin_src cease
+#+begin_src cease-ts
   switch Expression <<
       variant1: CaseBlock;
       variant2:
@@ -848,7 +848,7 @@ Switching can be done over any expression:
 The ~CaseBlock~ terminates with a ~yield~ and is not surrounded by braces. ~_~ is used as a wildcard. Switches
 must be exhaustive. Switching over enums doesn't require the ~--~ operator.
 
-#+begin_src cease
+#+begin_src cease-ts
   enum Colour {
   	 green,
   	 red,
@@ -872,7 +872,7 @@ wrapped.
 ** Case
 The ~case~ block is used as a special ~switch~ with only one case:
 
-#+begin_src cease
+#+begin_src cease-ts
   case --variant = variable:
 	 yield something;
 #+end_src
@@ -952,7 +952,7 @@ therefore recommended that the sections of the package name are tags rather than
 
 This is what a =package.stop= might look like:
 
-#+begin_src cease
+#+begin_src cease-ts
   ===
   Package documentation
   ===
@@ -980,7 +980,7 @@ This is what a =package.stop= might look like:
 
 When importing a package/symbol, use the ~use~ keyword:
 
-#+begin_src cease
+#+begin_src cease-ts
   use package/name;                    // symbols therein are now accessible under name:symbol
   use privateName = otherPackage/name; // give the import a name
   use package/name *;                  // Import all symbols natively.
@@ -988,15 +988,8 @@ When importing a package/symbol, use the ~use~ keyword:
   use otherPackage/name privateSymbol1 = symbol1, privateSymbol2 = symbol2;
 #+end_src
 
-You cannot use packages directly in the code without the ~use~ keyword like ~package/name:function~. This
-would conflict with division.
-
-You don't need to define the package for the =main= package - it's explicit and also nothing is exported. Only
-items ~use~​d in =main= or dependencies thereof are built.
 
 Using the package is done either by the given name ~privateName~ or by the last element of the path, so
-~name~. Imported symbols can be but don't need to be used directly, so ~symbol1~ and ~name:symbol1~ are both
-allowed.
 ** Modules
 Inside a packages, each file is a module. Modules of a package do not have a visibility over other modules but
 they can see the package file. To indicate that a symbol is exported for the package's modules but not for
@@ -1048,7 +1041,7 @@ analysis: ~new a: Type = SomeType;~.
 You can access field of a type via the ~=>~ operator. This returns an object of a ~Field~ type. ~Field~ is
 constrained by the parent type, and contains the ~Type~ field:
 
-#+begin_src cease
+#+begin_src cease-ts
   struct [Parent: Type] Field<Parent> {
     fieldType: Type
     ...
@@ -1074,7 +1067,7 @@ In addition to ~=>~, you can use the ~field~ pipe:
 This is a built-in pipe which determines the return value at compile time by
 which field is passed:
 
-#+begin_src cease
+#+begin_src cease-ts
   new t = SomeType;
   new f1: string = t | field SomeType=>strField;
   new f2: int = t | field SomeType=>intField;
@@ -1086,26 +1079,6 @@ In some languages the concept of an associated function exists whereby as functi
 type. That function must be accessed through the type (think Rust's ~Type::func()~). In Cease we don't have
 that, but we do have /pure type pipes/ which are chill pipes whose payload is not a variable of type ~A~ by
 the type ~A~ itself. This is a deeply reflexive concept and will be discussed in the chapter on reflection.
-* TODO Async
-* Precedence
-** Operator Precedence
-Control flow:   =, <-, :, return, yield, break, loop, cascade
-Application:    |, |>, $
-Injectors:      ??, ___
-Equality:       =​=, !​=
-Logic:          and, or, nand, xor, ||, &&
-Comparison:     <, >, <​=, >​=
-Addition:       +, -
-Multiplication: *, /, %, ^
-Unary:          not, !, -, *, &, ~, rlock, wlock, unlock
-Access:         :, ., =>
-Grouping:       (...), [...]
-** Annotation Precedence
-err may ark (ptr | mut | ref) itr into
-
-Since these are annotations of the same type rather than new types, there is a set precedence for how they are
-applied. You can have a failing maybe type (either error or a nullable value), but not a maybe failing type
-(either nullable error or a nullable value). That's just how it goes. Deal with it.
 * Reflection
 A type definition (enum, interface, struct, data, type, alias, all of them) creates a constant object which
 can be used as a value. The type of this object is the built-in ~Type~.
@@ -1129,7 +1102,7 @@ structs or data of course have a ~type: Type~ field describing the type of the f
 The ~Variable~ reflexive type describes a variable, which in practice means it holds its ~Type~ and its
 current value. To get a ~Variable~ from a variable, use the ~\~ operator:
 
-#+begin_src cease
+#+begin_src cease-ts
   struct MyStruct {
       field: int,
   }
@@ -1144,7 +1117,7 @@ current value. To get a ~Variable~ from a variable, use the ~\~ operator:
 Some built-in operations exist to interact with these types. The most obvious are ~field~ and its related
 pipes.
 
-#+begin_src cease
+#+begin_src cease-ts
   ===
   Returns the value of the field given by `field` of the payload.
   The return type is computed during compile time from `field`.
@@ -1192,7 +1165,7 @@ For the [[*Database Integration and the Desist Sub-language][Desist sub-language
 
 To define a new property, we use the ~prop~ keyword. This functions as the ~type~ keyword:
 
-#+begin_src cease
+#+begin_src cease-ts
   prop json word;        // json:firstName
   prop description line; // description:"This is a multi-word description"
   prop apiSettable bool; // apiSettable OR apiSettable:true
@@ -1223,7 +1196,7 @@ type, we use the ~%~ operator: ~%A~. This is called a "pure type."
 Free type pipes are pipes with a free type payload. They are sort of associated functions which can be used
 e.g. for constructors.
 
-#+begin_src cease
+#+begin_src cease-ts
   struct MyStruct {
       field: string,
   }
