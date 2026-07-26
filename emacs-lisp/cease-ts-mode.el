@@ -23,7 +23,7 @@
 
    :language 'cease
    :feature 'doc
-   '((documentation) @icon-button)
+   '((documentation) @font-lock-doc-face)
 
    :language 'cease
    :feature 'property
