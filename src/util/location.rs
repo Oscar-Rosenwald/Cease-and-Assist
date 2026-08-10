@@ -1,4 +1,4 @@
-type FileName = std::path::PathBuf;
+type FilePath = std::path::PathBuf;
 
 /// The location of a character in a file.
 ///
@@ -15,7 +15,7 @@ type FileName = std::path::PathBuf;
 ///
 /// `1` has the line-number `1:1`, and `9` has line-number `1:9`. The newline at
 /// the end of the line has line-number `1:11`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileLocation {
     /// Indexed from 1.
     line: usize,
@@ -26,9 +26,9 @@ pub struct FileLocation {
 /// A set of coordinates of a file. This can define any amount of text, one
 /// character long or larger. This can be used to report e.g. errors in a series
 /// of tokens.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Position {
-    file: FileName,
+    file: FilePath,
     start_position: FileLocation,
     end_position: Option<FileLocation>,
 }
@@ -79,91 +79,51 @@ impl std::fmt::Display for Position {
 }
 
 impl Position {
-    /// Construct a Position which spans more than one character.
+    #[cfg(test)]
     pub fn new_span(
-        file_name: FileName,
+        file_path: FilePath,
         start_line: usize,
         start_column: usize,
         end_line: usize,
         end_column: usize,
-    ) -> Self {
-        Self {
-            file: file_name,
-            start_position: FileLocation {
-                line: start_line,
-                column: start_column,
-            },
-            end_position: Some(FileLocation {
-                line: end_line,
-                column: end_column,
-            }),
-        }
-    }
-
-    pub fn new_location(file: FileName, location: FileLocation) -> Self {
-        Self {
-            file,
-            start_position: location,
-            end_position: None,
-        }
-    }
-
-    /// Constructs a Position with no end file and line.
-    pub fn new_point(file_name: FileName, line: usize, column: usize) -> Self {
-        Self {
-            file: file_name,
-            end_position: None,
-            start_position: FileLocation { line, column },
-        }
+    ) -> Position {
+        let ret = Self {
+            start_position: FileLocation::new(start_line, start_column),
+            end_position: Some(FileLocation::new(end_line, end_column)),
+            file: file_path,
+        };
+        ret.validate();
+        return ret;
     }
 
     /// Constructs a Position from the start and end.
-    pub fn new_start_end(file_name: FileName, start: FileLocation, end: FileLocation) -> Self {
+    pub fn new(file_path: FilePath, start: FileLocation, end: FileLocation) -> Self {
         Self {
-            file: file_name,
+            file: file_path,
             start_position: start,
             end_position: Some(end),
         }
     }
 
-    pub fn merge(self, other: Self) -> Self {
-        if self.start_position.line < other.start_position.line {
-            return Self {
-                file: self.file.clone(),
-                start_position: self.start_position,
-                end_position: other.end_position,
-            };
-        }
-        if self.start_position.line > other.start_position.line {
-            return Self {
-                file: self.file.clone(),
-                start_position: other.start_position,
-                end_position: self.end_position,
-            };
-        }
-        if self.start_position.column < other.start_position.column {
-            return Self {
-                file: self.file.clone(),
-                start_position: self.start_position,
-                end_position: other.end_position,
-            };
-        }
-        return Self {
-            file: self.file.clone(),
-            start_position: other.start_position,
-            end_position: self.end_position,
-        };
-    }
-
     /// Panics if any of the arguments are below 1. This is because
     /// [`Position`]'s fields are indexed from 1.
-    fn validate(start_line: usize, start_column: usize, end_line: usize, end_column: usize) {
+    #[cfg(test)]
+    pub fn validate(&self) {
+        let (start_line, start_column) = (self.start_position.line, self.start_position.column);
+
         if start_line < 1 {
             panic!("Cannot have start line have a value < 1, have {start_line}");
         }
         if start_column < 1 {
             panic!("Cannot have start column have a value < 1, have {start_column}");
         }
+
+        let Some(ref end_position) = self.end_position else {
+            return;
+        };
+
+        let (end_line, end_column) = (end_position.line, end_position.column);
+
         if end_line < 1 {
             panic!("Cannot have end line have a value < 1, have {end_line}");
         }
@@ -175,25 +135,21 @@ impl Position {
 
 /// Creates a new `Position` object.
 ///
-/// Can either be a point (argument `file_name`, `start_line`, `start_column`)
+/// Can either be a point (argument `file_path`, `start_line`, `start_column`)
 /// or a span (the same plus `end_line`, `end_column`).
 ///
 /// `file_name` is a `path::PathBuf`. The rest are `usize` indexed from 1. The
 /// macro will panic if either of those is <1.
+#[cfg(test)]
+#[macro_export]
 macro_rules! position {
-    ($file_name:expr, $start_line:expr, $start_column:expr, $end_line:expr, $end_column:expr) => {
-        util::location::Position::validate($start_line, $start_column, $end_line, $end_column);
-        util::location::Position::new_span(
-            $file_name,
+    ($file_path:expr, $start_line:expr, $start_column:expr, $end_line:expr, $end_column:expr) => {
+        crate::util::location::Position::new_span(
+            $file_path,
             $start_line,
             $start_column,
             $end_line,
             $end_column,
-        );
-    };
-
-    ($file_name:expr, $start_line:expr, $start_column:expr) => {
-        util::location::Position::validate($start_line, $start_column);
-        util::location::Position::new_point($file_name, $start_line, $start_column);
+        )
     };
 }

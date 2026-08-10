@@ -1,16 +1,19 @@
 use super::*;
+use std::fmt::Debug;
 use std::str::FromStr;
 
-#[derive(Debug)]
 pub struct Token {
     pub position: Position,
     pub kind: TokenKind,
-    pub syntax_errors: Option<Vec<CeaseError>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind {
-    Error(String),
+    Error {
+        snippet: String,
+        errors: Vec<CeaseError>,
+        intended_kind: IntendedTokenKind,
+    },
     Literal(String),
     Documentation(String),
     String(String),
@@ -20,7 +23,7 @@ pub enum TokenKind {
     Int(u64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Keyword {
     New,            // "new"
     Old,            // "old"
@@ -65,7 +68,7 @@ pub enum Keyword {
     False,          // "false"
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Symbol {
     Dot,                // "."
     Comma,              // ","
@@ -103,7 +106,7 @@ pub enum Symbol {
     ThreeEquals,        // "==="
     TwoUnderscore,      // "__"
     ThreeUnderscore,    // "___"
-    QuestionQuestion,   // "??"
+    Questionmark,       // "?"
     LeftParen,          // "("
     RightParen,         // ")"
     LeftBrace,          // "{"
@@ -114,6 +117,14 @@ pub enum Symbol {
     RightChevron,       // ">"
     LeftDoubleChevron,  // "<<"
     RightDoubleChevron, // ">>"
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum IntendedTokenKind {
+    Documentation,
+    String,
+    Char,
+    Other,
 }
 
 impl std::fmt::Display for Keyword {
@@ -257,7 +268,7 @@ impl std::fmt::Display for Symbol {
             Self::ThreeEquals => "===",
             Self::TwoUnderscore => "__",
             Self::ThreeUnderscore => "___",
-            Self::QuestionQuestion => "??",
+            Self::Questionmark => "?",
             Self::LeftParen => "(",
             Self::RightParen => ")",
             Self::LeftBrace => "{",
@@ -315,7 +326,7 @@ impl std::str::FromStr for Symbol {
             "===" => Self::ThreeEquals,
             "__" => Self::TwoUnderscore,
             "___" => Self::ThreeUnderscore,
-            "??" => Self::QuestionQuestion,
+            "?" => Self::Questionmark,
             "(" => Self::LeftParen,
             ")" => Self::RightParen,
             "{" => Self::LeftBrace,
@@ -336,7 +347,19 @@ impl std::str::FromStr for Symbol {
 impl std::fmt::Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Error(error) => write!(f, "{error}"),
+            Self::Error {
+                snippet,
+                errors,
+                intended_kind: _,
+            } => write!(
+                f,
+                "{snippet}: {}",
+                errors
+                    .iter()
+                    .map(|e| format!("{e}"))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ),
             Self::Literal(literal) => write!(f, "{literal}"),
             Self::Documentation(documentation) => write!(f, "{documentation}"),
             Self::String(sentense) => write!(f, "{sentense}"),
@@ -356,25 +379,22 @@ impl std::fmt::Display for Token {
 
 impl Token {
     pub(super) fn new(kind: TokenKind, position: Position) -> Self {
-        Self {
-            kind,
-            position,
-            syntax_errors: None,
-        }
+        Self { kind, position }
     }
 
     pub(super) fn failing(
         error_snippet: String,
+        intended_token_kind: IntendedTokenKind,
         position: Position,
         error: CeaseError,
-        mut errors: Vec<CeaseError>,
     ) -> Self {
-        errors.push(error);
-
         Self {
-            kind: TokenKind::Error(error_snippet),
+            kind: TokenKind::Error {
+                snippet: error_snippet,
+                errors: vec![error],
+                intended_kind: intended_token_kind,
+            },
             position,
-            syntax_errors: Some(errors),
         }
     }
 }
@@ -445,7 +465,7 @@ impl Symbol {
             | Self::Percent
             | Self::Backslash
             | Self::At
-            | Self::QuestionQuestion
+            | Self::Questionmark
             | Self::LeftParen
             | Self::RightParen
             | Self::LeftBrace
@@ -454,7 +474,7 @@ impl Symbol {
             | Self::RightBracket => SymbolParseResult::Symbol(symbol),
 
             // Symbol candidates
-            Self::TwoUnderscore => SymbolParseResult::Candidate {
+            Self::TwoUnderscore | Self::Underscore => SymbolParseResult::Candidate {
                 symbol,
                 terminal: false,
             },
@@ -469,7 +489,6 @@ impl Symbol {
             | Self::Bar
             | Self::Equals
             | Self::Tilda
-            | Self::Underscore
             | Self::EqualsEquals
             | Self::LeftChevron
             | Self::RightChevron
@@ -493,5 +512,36 @@ impl Symbol {
             | Self::LeftDoubleChevron
             | Self::RightDoubleChevron => SymbolParseResult::Symbol(symbol),
         }
+    }
+}
+
+impl Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let position = self.position.to_string();
+        let content = self.kind.to_string();
+
+        let type_ = match &self.kind {
+            TokenKind::Literal(_) => "lit",
+            TokenKind::Documentation(_) => "doc",
+            TokenKind::String(_) => "str",
+            TokenKind::Char(_) => "char",
+            TokenKind::Keyword(_) => "key",
+            TokenKind::Symbol(_) => "sym",
+            TokenKind::Int(_) => "int",
+            TokenKind::Error {
+                snippet,
+                errors,
+                intended_kind,
+            } => {
+                let (error_location, error_summaries) = Error::vec_to_debug(errors);
+                return write!(
+                    f,
+                    "(error {:?}) {error_location}: {snippet} - {:?}",
+                    intended_kind, error_summaries,
+                );
+            }
+        };
+
+        write!(f, "({type_}) {position}: {content}")
     }
 }

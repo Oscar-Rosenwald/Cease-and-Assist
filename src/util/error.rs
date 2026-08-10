@@ -1,7 +1,7 @@
 use super::*;
 use std::string::ToString;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Error {
     message: String,
     kind: ErrorKind,
@@ -9,7 +9,7 @@ pub struct Error {
 }
 
 /// Denotes the place where an error was encountered.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ErrorLocation {
     /// Error not connected with any particular position in a file.
     Generic,
@@ -20,7 +20,7 @@ pub enum ErrorLocation {
 }
 
 /// Denotes which step of compilation the error occured in.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     /// An error on the part of the author of the Cease language. Submit a bug,
     /// I guess.
@@ -29,13 +29,34 @@ pub enum ErrorKind {
     Syntax,
     /// Error during reading of the input. File errors etc.
     Lexer,
-    /// Error splitting the program into tokens.
-    Tokeniser,
     /// Error sorting tokens into expressions and statements.
+    #[allow(dead_code)] // TODO: Remove when you get there
     SyntaxTree,
 }
 
 impl Error {
+    /// Returns a (`error location`, `error summaries`) pair.
+    pub fn vec_to_debug(errors: &Vec<Self>) -> (String, Vec<String>) {
+        if errors.is_empty() {
+            return (String::new(), Vec::new());
+        }
+
+        let ret_location = match &errors.first().unwrap().location {
+            ErrorLocation::Generic => String::from("Compiler"),
+            ErrorLocation::File(file_path) => file_path.to_string_lossy().to_string(),
+            ErrorLocation::Position(position) => position.to_string(),
+        };
+
+        let mut ret_str = Vec::new();
+
+        for error in errors {
+            let error = format!("({:?}) {}", error.kind, error.message);
+            ret_str.push(error);
+        }
+
+        return (ret_location, ret_str);
+    }
+
     /// Constructs a new Error of [`ErrorKind::Author`] which denotes an error
     /// in the compiler.
     pub fn author<S: ToString>(message: S, location: ErrorLocation) -> Self {
@@ -55,15 +76,6 @@ impl Error {
         }
     }
 
-    /// Constructs a new Error of [`ErrorKind::Tokeniser`].
-    pub fn tokeniser<S: ToString>(message: S, location: ErrorLocation) -> Self {
-        Self {
-            message: message.to_string(),
-            kind: ErrorKind::Tokeniser,
-            location,
-        }
-    }
-
     /// Construct a new Error of [`ErrorKind::Lexer`].
     pub fn lexer<S: ToString>(message: S, location: ErrorLocation) -> Self {
         Self {
@@ -74,6 +86,7 @@ impl Error {
     }
 
     /// Construct a new Error of [`ErrorKind::SyntaxTree`].
+    #[allow(dead_code)] // TODO: Remove when you get there
     pub fn syntax_tree<S: ToString>(message: S, location: ErrorLocation) -> Self {
         Self {
             message: message.to_string(),
@@ -88,7 +101,6 @@ impl std::fmt::Display for Error {
         let error_kind = match self.kind {
             ErrorKind::Author => "Compiler bug",
             ErrorKind::Syntax => "Syntax error",
-            ErrorKind::Tokeniser => "Tokenisation error",
             ErrorKind::Lexer => "Lexing error",
             ErrorKind::SyntaxTree => "Error parsing syntax tree",
         };

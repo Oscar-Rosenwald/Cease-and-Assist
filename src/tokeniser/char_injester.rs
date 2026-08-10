@@ -139,14 +139,19 @@ impl Lexer {
 // Business logic
 impl Stage {
     fn push_char(&mut self, new_char: char, location: FileLocation) -> Vec<Token> {
-        self.last_seen_location = location.clone();
-
         let (new_stage_kind, processed_tokens) = match std::mem::take(&mut self.kind) {
-            StageKind::Whitespace => self.push_char_to_whitespace(new_char, location),
+            StageKind::Whitespace => {
+                self.last_seen_location = location.clone();
+                self.push_char_to_whitespace(new_char, location)
+            }
             StageKind::Comment(comment_kind) => {
                 (push_char_to_comment(new_char, comment_kind), vec![])
             }
-            StageKind::Normal(snippet) => self.push_char_to_normal(new_char, snippet),
+            StageKind::Normal(snippet) => {
+                let (new_stage_kind, processed_tokens) =
+                    self.push_char_to_normal(new_char, snippet, location);
+                (new_stage_kind, processed_tokens)
+            }
             StageKind::ExtendableSymbol(candidate) => {
                 self.push_char_to_extendable_symbol(new_char, candidate, location)
             }
@@ -155,39 +160,38 @@ impl Stage {
                 candidate,
             } => self.push_char_to_symbol_candidate(new_char, non_symbol_snippet, candidate),
             StageKind::String { escaped, snippet } => {
+                self.last_seen_location = location;
                 let (new_str, processed_tokens) =
                     self.push_char_to_string(new_char, escaped, snippet);
 
                 let new_stage_kind = match new_str {
                     None => StageKind::Whitespace,
-                    Some(snippet) => StageKind::String {
-                        escaped: false,
-                        snippet,
-                    },
+                    Some((snippet, escaped)) => StageKind::String { escaped, snippet },
                 };
 
                 (new_stage_kind, processed_tokens)
             }
             StageKind::Char { escaped, snippet } => {
+                self.last_seen_location = location;
                 let (new_str, processed_tokens) =
                     self.push_char_to_char(new_char, escaped, snippet);
 
                 let new_stage_kind = match new_str {
                     None => StageKind::Whitespace,
-                    Some(snippet) => StageKind::Char {
-                        escaped: false,
-                        snippet,
-                    },
+                    Some((snippet, escaped)) => StageKind::Char { escaped, snippet },
                 };
                 (new_stage_kind, processed_tokens)
             }
             StageKind::Documentation {
                 seen_terminator_count,
                 snippet,
-            } => (
-                push_char_to_documentation(new_char, snippet, seen_terminator_count),
-                vec![],
-            ),
+            } => {
+                self.last_seen_location = location;
+                (
+                    push_char_to_documentation(new_char, snippet, seen_terminator_count),
+                    vec![],
+                )
+            }
         };
 
         self.kind = new_stage_kind;
@@ -219,20 +223,25 @@ impl Stage {
                 non_symbol_snippet,
                 candidate,
             } => {
-                let snippet = match non_symbol_snippet {
-                    None => "",
-                    Some(ref snippet) => snippet,
+                let token = match non_symbol_snippet {
+                    None => {
+                        let error = CeaseError::syntax(
+                            "Invalid name or unfinished symbol",
+                            ErrorLocation::Position(self.position()),
+                        );
+                        Token::failing(
+                            format!("{candidate}"),
+                            IntendedTokenKind::Other,
+                            self.position(),
+                            error,
+                        )
+                    }
+                    Some(ref snippet) => {
+                        let token_kind = TokenKind::Literal(format!("{snippet}{candidate}"));
+                        Token::new(token_kind, self.position())
+                    }
                 };
-                let error = CeaseError::syntax(
-                    "Invalid name or unfinished symbol",
-                    ErrorLocation::Position(self.position()),
-                );
-                let token = Token::failing(
-                    format!("{snippet}{candidate}"),
-                    self.position(),
-                    error,
-                    vec![],
-                );
+
                 (StageKind::Whitespace, vec![token])
             }
             StageKind::String {
@@ -263,15 +272,16 @@ impl Stage {
                 seen_terminator_count,
                 snippet,
             } => {
-                self.last_seen_location = location;
-
                 if seen_terminator_count >= 3 {
-                    let token_kind = TokenKind::Documentation(snippet);
+                    let token_kind = TokenKind::Documentation(snippet.trim().to_string());
                     let token = Token::new(token_kind, self.position());
+                    self.last_seen_location = location;
+
                     (StageKind::Whitespace, vec![token])
                 } else {
                     let new_stage_kind =
                         push_char_to_documentation(new_char, snippet, seen_terminator_count);
+                    self.last_seen_location = location;
                     (new_stage_kind, vec![])
                 }
             }
@@ -302,7 +312,12 @@ impl Stage {
 
                 let error_location = ErrorLocation::Position(self.position());
                 let error = CeaseError::syntax("Invalid symbol.", error_location);
-                let token = Token::failing(error_message, self.position(), error, vec![]);
+                let token = Token::failing(
+                    error_message,
+                    IntendedTokenKind::Other,
+                    self.position(),
+                    error,
+                );
                 vec![token]
             }
             StageKind::String {
@@ -314,7 +329,8 @@ impl Stage {
                     "Unterminated string. Try a quote, dumbarse.",
                     error_location,
                 );
-                let token = Token::failing(snippet, self.position(), error, vec![]);
+                let token =
+                    Token::failing(snippet, IntendedTokenKind::String, self.position(), error);
                 vec![token]
             }
             StageKind::Char {
@@ -324,7 +340,8 @@ impl Stage {
                 let error_location = ErrorLocation::Position(self.position());
                 let error =
                     CeaseError::syntax("Unterminated char. Try a quote, dumbarse.", error_location);
-                let token = Token::failing(snippet, self.position(), error, vec![]);
+                let token =
+                    Token::failing(snippet, IntendedTokenKind::Char, self.position(), error);
                 vec![token]
             }
             StageKind::Documentation {
@@ -336,7 +353,12 @@ impl Stage {
                     "Unterminated documentation block. Try ending it? With a === maybe? Jesus Christ.",
                     error_location,
                 );
-                let token = Token::failing(snippet, self.position(), error, vec![]);
+                let token = Token::failing(
+                    snippet,
+                    IntendedTokenKind::Documentation,
+                    self.position(),
+                    error,
+                );
                 vec![token]
             }
         }
@@ -374,7 +396,9 @@ impl Stage {
     fn push_generic_char_to_whitespace(&self, new_char: char) -> (StageKind, Vec<Token>) {
         let symbol_result = Symbol::parse_char(None, new_char);
         match symbol_result {
-            SymbolParseResult::NoSymbol => return (StageKind::Normal(String::new()), vec![]),
+            SymbolParseResult::NoSymbol => {
+                return (StageKind::Normal(String::from(new_char)), vec![]);
+            }
             SymbolParseResult::ExtendableCandidate(candidate) => {
                 return (StageKind::ExtendableSymbol(candidate), vec![]);
             }
@@ -399,28 +423,40 @@ impl Stage {
         &mut self,
         new_char: char,
         mut snippet: String,
+        end_location: FileLocation,
     ) -> (StageKind, Vec<Token>) {
         match Symbol::parse_char(None, new_char) {
             SymbolParseResult::NoSymbol => {
+                self.last_seen_location = end_location;
                 snippet.push(new_char);
                 return (StageKind::Normal(snippet), vec![]);
             }
             SymbolParseResult::Symbol(symbol) => {
+                let normal_token = self.end_normal(snippet);
+
+                self.start_location = end_location.clone();
+                self.last_seen_location = end_location;
                 let token_kind = TokenKind::Symbol(symbol);
-                let token = Token::new(token_kind, self.position());
-                return (StageKind::Whitespace, vec![token]);
+                let symbol_token = Token::new(token_kind, self.position());
+
+                return (StageKind::Whitespace, vec![normal_token, symbol_token]);
             }
             SymbolParseResult::ExtendableCandidate(candidate) => {
-                return self.normal_and_symbol_snippet_to_token(snippet, candidate);
+                return self.normal_and_symbol_snippet_to_token(snippet, candidate, end_location);
             }
             SymbolParseResult::Candidate {
                 symbol: candidate,
                 terminal,
             } => {
                 if terminal {
-                    return self.normal_and_symbol_snippet_to_token(snippet, candidate);
+                    return self.normal_and_symbol_snippet_to_token(
+                        snippet,
+                        candidate,
+                        end_location,
+                    );
                 }
 
+                self.last_seen_location = end_location;
                 let new_stage_kind = StageKind::SymbolCandidate {
                     candidate,
                     non_symbol_snippet: Some(snippet),
@@ -434,14 +470,14 @@ impl Stage {
         &mut self,
         new_char: char,
         symbol_candidate: Symbol,
-        location: FileLocation,
+        end_location: FileLocation,
     ) -> (StageKind, Vec<Token>) {
         match Symbol::parse_char(Some(symbol_candidate.to_string().as_str()), new_char) {
             SymbolParseResult::NoSymbol => {
                 let token_kind = TokenKind::Symbol(symbol_candidate);
                 let token = Token::new(token_kind, self.position());
                 let mut tokens = vec![token];
-                tokens.append(&mut self.push_char(new_char, location));
+                tokens.append(&mut self.push_char(new_char, end_location));
 
                 return (std::mem::take(&mut self.kind), tokens);
             }
@@ -455,7 +491,17 @@ impl Stage {
                         vec![],
                     );
                 }
+                Symbol::ThreeEquals => {
+                    return (
+                        StageKind::Documentation {
+                            seen_terminator_count: 0,
+                            snippet: String::new(),
+                        },
+                        vec![],
+                    );
+                }
                 symbol => {
+                    self.last_seen_location = end_location.clone();
                     let token = Token::new(TokenKind::Symbol(symbol), self.position());
                     return (StageKind::Whitespace, vec![token]);
                 }
@@ -483,7 +529,7 @@ impl Stage {
         symbol_candidate: Symbol,
     ) -> (StageKind, Vec<Token>) {
         let candidate_str = symbol_candidate.to_string();
-        let snippet = match snippet {
+        let mut snippet = match snippet {
             None => candidate_str,
             Some(mut s) => {
                 s.push_str(&candidate_str);
@@ -493,6 +539,7 @@ impl Stage {
 
         match Symbol::parse_char(Some(&snippet), new_char) {
             SymbolParseResult::NoSymbol => {
+                snippet.push(new_char);
                 return (StageKind::Normal(snippet), vec![]);
             }
             SymbolParseResult::ExtendableCandidate(symbol) => {
@@ -520,7 +567,7 @@ impl Stage {
         new_char: char,
         escaped: bool,
         mut snippet: String,
-    ) -> (Option<String>, Vec<Token>) {
+    ) -> (Option<(String, bool)>, Vec<Token>) {
         match new_char {
             '\'' if escaped => snippet.push(new_char),
             '\'' => match char::from_str(&snippet) {
@@ -534,14 +581,17 @@ impl Stage {
                         "Too many characters in this character. Try one.",
                         error_location,
                     );
-                    let token = Token::failing(snippet, self.position(), error, vec![]);
+                    let token =
+                        Token::failing(snippet, IntendedTokenKind::Char, self.position(), error);
                     return (None, vec![token]);
                 }
             },
+            '\\' if escaped => snippet.push(new_char),
+            '\\' => return (Some((snippet, true)), vec![]),
             c => snippet.push(c),
         }
 
-        return (Some(snippet), vec![]);
+        return (Some((snippet, false)), vec![]);
     }
 
     fn push_char_to_string(
@@ -549,23 +599,26 @@ impl Stage {
         new_char: char,
         escaped: bool,
         mut snippet: String,
-    ) -> (Option<String>, Vec<Token>) {
+    ) -> (Option<(String, bool)>, Vec<Token>) {
         match new_char {
             '"' if escaped => snippet.push(new_char),
             '"' => {
                 let token = Token::new(TokenKind::String(snippet), self.position());
                 return (None, vec![token]);
             }
+            '\\' if escaped => snippet.push(new_char),
+            '\\' => return (Some((snippet, true)), vec![]),
             c => snippet.push(c),
         }
 
-        return (Some(snippet), vec![]);
+        return (Some((snippet, false)), vec![]);
     }
 
     fn normal_and_symbol_snippet_to_token(
-        &self,
+        &mut self,
         snippet: String,
         symbol_candidate: Symbol,
+        end_location: FileLocation,
     ) -> (StageKind, Vec<Token>) {
         let token_kind = match Keyword::from_str(&snippet) {
             Ok(keyword) => TokenKind::Keyword(keyword),
@@ -574,10 +627,10 @@ impl Stage {
 
         let token = Token::new(token_kind, self.position());
 
-        let new_stage_kind = StageKind::SymbolCandidate {
-            non_symbol_snippet: None,
-            candidate: symbol_candidate,
-        };
+        self.start_location = end_location.clone();
+        self.last_seen_location = end_location;
+
+        let new_stage_kind = StageKind::ExtendableSymbol(symbol_candidate);
 
         return (new_stage_kind, vec![token]);
     }
@@ -595,7 +648,7 @@ impl Stage {
     }
 
     fn position(&self) -> Position {
-        Position::new_start_end(
+        Position::new(
             self.file_path.clone(),
             self.start_location.clone(),
             self.last_seen_location.clone(),
