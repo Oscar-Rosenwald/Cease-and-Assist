@@ -1,32 +1,44 @@
+=== A linked list implementation which requires at least one element to be present. ===
 struct LinkedList<#A> {
 	sec value: A,
 	sec next: may ptr Self,
 }
 
 
+=== Construct a new `LinkedList` object with 1 element `value` ===
 %LinkedList<#A> | make :: value: A -> ptr LinkedList<A>:
 	heap list = LinkedList << value, next: void >>;
 	return list;
 
 
+===
+Returns the last element of the list.
+Since the list is not allowed to be empty, the last element is always valid.
+===
 mut LinkedList<#A> | last :: -> mut LinkedList<A>:
 	if self.next | isVoid:
 		return self;
 	return self.next | unvoid | last;
 
 
+=== Add `value` to the end of the list. Returns the list for chaining. ===
 mut LinkedList<#A> | append :: value: A -> Self:
 	new newValue = LinkedList | make value;
 	self | last | setField LinkedList=>next newValue;
 	return self;
 
 
+=== Add `value` to the beginning of the list. Return the list for chaining. ===
 ptr LinkedList<#A> |> prepend :: value: A -> Self:
 	new newNode = LinkedList | make value;
 	old newNode.next = self;
 	return newNode;
 
 
+===
+Returns a reference to the node whose value matches
+`value`, or `void` if none such exists.
+===
 mut LinkedList<#A> | find :: value: A -> may Self:
 	if self.value == value: return self;
 	if self.next | isVoid: return void;
@@ -67,7 +79,7 @@ ref LinkedList<#A> | forEach :: operation: (ref A) => err void: err void
 ref LinkedList<#A> | fold ::
 	base: #B,
 	accumulate: (newValue ref A, folded B) => err B
--> err B:
+->  err B:
 	new folded = accumulate(self.value, base) ?? "Fold failed";
 	if self.next | isvoid: return folded;
 	return self.next

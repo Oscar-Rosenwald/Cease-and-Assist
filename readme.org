@@ -1,3 +1,6 @@
+#+OPTIONS: broken-links:mark
+TODO: WHILE DEFINING THE CONTEXT-FREE GRAMMAR, A FEW RULES HAD TO BE CHANGED. UPDATE THE README ACCORDINGLY.
+
 :preamble:
 Cease is an expression-driven language, meaning almost every semantic unit has a value, including what in
 other languages would be a value-less statement such as ~if~ or even ~use~ (package import). It is also a
@@ -6,7 +9,7 @@ difficult but, once mastered, make in turn parsing the code fast. To that end, C
 readable in an unfontified environment such as GitHub's PR review page or ~cat~ in the command line. Different
 concepts in Cease have distinct symbols, unlike most other languages where the ~.~ operator is extremely
 overloaded (~something.other~ could mean package import or field access or a method call and you wouldn't
-know; so in Cease ~a.b~ is a field data access whereas ~a:b~ is a package->symbol call etc.).
+know; so in Cease ~a.b~ is a field data access whereas ~a:>b~ is a package->symbol call etc.).
 
 Cease has these major distinctions from other languages:
 
@@ -31,7 +34,7 @@ Cease has these major distinctions from other languages:
 Cease allows the user to split an expression among many lines, particularly piped expressions, so expressions
 are terminated with semicolons to disambiguate newlines:
 
-#+begin_src cease
+#+begin_src cease-ts :exports code
   someValue
     |  pipe1
     |  pipe2
@@ -56,7 +59,7 @@ variable of a new type, which makes the old value go out of scope.
 
 Variables can be global (on the module level - see later for modules and packages), or local to a procedure.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   // Basic variables on the stack
   new stackVar = 7;
   old stackVar = 8;
@@ -100,7 +103,7 @@ In Cease, constants can be of any type. The constant is baked into the binary.
 #+begin_src cease
   const someConst = "constant string";
 #+end_src
-* [0/1] Types
+* TODO Types
 Cease treats types quite broadly. Generic types are very common, as are constraints and type classes etc. Most
 languages with generic types use ~T~ and ~U~ and ~V~. In Cease we go the Haskell way, so generic types are
 either ~A~, ~B~, ~C~, or they are given actual names like ~Parent~. There is a chapter on generics, so for now
@@ -141,13 +144,12 @@ input and no output. ~Program~​s are mostly used by the core library.
 
 Programs are created by braces:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   expression;
   expression;
-  functionCall $ {
+  functionCall $ <<
       programExpression;
-      programExpression;
-  };
+      programExpression >>;
   expression;
 #+end_src
 *** Embedded
@@ -155,7 +157,7 @@ An ~Embedded~ type is used by the core library and not exported because it's too
 It's a type of ~Program~ which is executed in the caller's stack. It's used mostly for early returns. Pipes
 such as ~ifer~ use the ~Embedded~ type so that the caller can do:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   someFailingOp | ifer return false;
   // Continue function if not error.
 #+end_src
@@ -166,7 +168,7 @@ and is the last bit of the expression (such as in the example, i.e., followed by
 wrapped in braces at all. By contrast, here we still have a single terminator, but there is more to follow in
 the expression, so we must wrap the ~Embedded~ block:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   someFailingOp
     | iferr { return false; }
     | pipeCall;
@@ -175,7 +177,7 @@ the expression, so we must wrap the ~Embedded~ block:
 When defining interfaces, we may use the ~Self~ type as a generic type which will be resolved to the concrete
 type implementing the interface. Interfaces are discussed later, so this is just for completeness.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   interface SomeInter {
       // Here "Self" means "the type which implements SomeInter"
       Self | somePipe :: -> Self;
@@ -231,7 +233,7 @@ out of scope (ignore the ~|>~ for now and just accept it).
 
 "Ark" is called ark as in a chest, as in something lockable that has a treasure in it.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   new lockedInt: ark int = 8 | lock;
 
   new readRef = lockedInt | rlock; // readRef is a read-only pointer AKA a "reference"
@@ -244,7 +246,7 @@ out of scope (ignore the ~|>~ for now and just accept it).
   writeRef |> unlock;
 #+end_src
 
-Symbol: ~ark A~ == ~#T~
+Symbol: ~ark A~ == ~^A~
 **** Ptr, Mut, Ref
 These annotations denote types of pointers.
 
@@ -261,7 +263,7 @@ Symbols:
 - ~mut A~ =​= ~*A~
 - ~ref A~ =​= ~&A~
 
-Turning a type into a ~mut~ or ~ref~ is done by the same symbol (~*var~ or ~&var~), or by an appropriate type
+Turning a type into a ~mut~ or ~ref~ is done by the same symbol (~*var~ or ~&var~), or by an appropriate pipe
 (~var | ref~ or ~var | mut~).
 
 ~ref~​s and ~mut~​s don't own the data they point to. They can appear inside of structs or be returned from
@@ -274,13 +276,13 @@ as well. The returned reference's lifetime is tied to that of the payload, and t
 scope when the payload does. This means references can be returned only from chill pipes since grabby pipes
 consume their payloads which would make the returned reference immediately freed. Example:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   ref ...#A | find :: match: (ref A) => bool -> may ref A:
       for element in self | iterRefs :
           loop if match $ element: return elemenent;
       return void;
 
-  new list = [1 2 3 4];
+  new list = [[1 2 3 4]];
   new element: may ref int = list | find (x) { *x == 2 };
   list | drop; // element also goes out of scope.
 #+end_src
@@ -297,14 +299,14 @@ form as ~ExistingType~ and inherit all its properties and pipes, fields etc., bu
 in its own right. Pipes defined on ~NewType~ are not defined on ~OldType~. The built-in string variants ~word~
 and ~line~ are both inherited types:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   type line string;
   type word string;
 #+end_src
 
 The difference between aliases and inherited types is best shown by an example:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   // Define one alias and one inheritted type
   alias AliasString;
   type NewString string;
@@ -335,7 +337,7 @@ For clarity, when using enums as types (rather than for declarations), we prepen
 practice this means inside of other type definitions (e.g. struct fields might be of type ~@Colour~) or
 procedure definitions (a function returns a ~@Colour~).
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   type ColourSpan int; // Must be 0-255
 
   enum Colour {
@@ -380,7 +382,7 @@ For this reason, structs are very simple to define and declare. As with other ty
 definition is wrapped in braces but the declaration, which must be exhaustive, is surrounded by double
 chevrons ~<< ... >>~.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   struct MyStruct {
       field1: word,
       field2: into int,
@@ -392,7 +394,7 @@ chevrons ~<< ... >>~.
       field2: 8,
       field3: emptyIterator<MyStruct> $ >>;
 #+end_src
-** TODO Data
+** TODO COMMENT Data
 Data is a kind of struct with extra, *extra* metadata. Data types are the main selling point of Cease.
 
 #+BEGIN_TODO
@@ -408,23 +410,23 @@ Data is a kind of struct with extra, *extra* metadata. Data types are the main s
   that data. This will also require/forbid some field properties tied to the trait.
 #+END_TODO
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   base data user {
       identifier Uuid {
           primaryKey
-          sql:identifier
+          sql:>identifier
       }
       Name word {
           required
-          auth:validLastName
-          sql:name
+          auth:>validLastName
+          sql:>name
       }
       age int {
-          auth:validAge
-          sql:age
+          auth:>validAge
+          sql:>age
       }
       random_field bool {
-          sql:random_field
+          sql:>random_field
       }
   } // no properties on a base, only on the current version
 
@@ -521,10 +523,10 @@ Data is a kind of struct with extra, *extra* metadata. Data types are the main s
   data Permission {
       id Uuid {
           primaryKey
-          sql:id
+          sql:>id
       }
   } properties {
-      table:properties
+      table:>properties
       db
   }
 #+end_src
@@ -544,7 +546,7 @@ prepend ~_~ to the interface name to indicate it's an interface.
 Implementations of interfaces are done via the ~impl~ keyword before the name of the pipe you're implementing.
 Ignore the pipe syntax, that'll come later.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   interface StringReader {
       // Reads string from somewhere, returns an error on failure, returns void
       // when done. This pipe must be implemented.
@@ -599,7 +601,7 @@ type annotations with generics freely.
 Generics may be limited to a class of types. A class of types is represented by an interface. To indicate
 this, we put a class block at the beginning of the scope:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   #A | somePipe :: ... // Pipe which works with absolutely any type
 
   [A: _ToString] A | otherPipe :: ... // Pipe which works with any type which implements _ToString.
@@ -610,17 +612,17 @@ Note ~#~ can be omitted in the class block.
 Types can be constraint by other types. This is indicated by ~<...>~ in their type definition. For example, a
 linked list is constraint by the type of its elements. The type may be generic.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   struct LinkedList<#A> {
       currentValue: A,
-      next: may ptr LinkedList<A>,
+      next:         may ptr LinkedList<A>,
   }
 #+end_src
 
 Constraints may then be used in pipes, and the pipes are defined on the constraint type, not the type, so
 these two are distinct procedures despite having the same name:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   LinkedList<string> | pipe :: ...
 
   LinkedList<int> | pipe :: ...
@@ -648,7 +650,7 @@ Functions take any number of (named) arguments and return any number of (optiona
 written in a one line shorthand or in long form. They are terminated by the ~return~ keyword, even if they
 return nothing (such functions return ~void~ implicitly).
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   onelineFunc :: arg: Type -> ReturnType = ReturnType << ... >>;
 
   multilineFunc :: arg1: Type1, arg2 arg3: Type2 -> ret1: RetType1, RetType2:
@@ -665,13 +667,13 @@ Some special cases:
 - If the function has no arguments, we use ~:: -> RetType:~.
 - If the function has no return value, we use ~:: arg: Type:~.
 - If the function returns nothing and has no arguments, we can use ~:::~.
-  #+begin_src cease-ts
+  #+begin_src cease-ts :exports code
     noReturnFunc :::
       doStuff;
       return;
   #+end_src
 - If the function returns ~void~, we can put anything after ~return~ without actually returning anything:
-  #+begin_src cease-ts
+  #+begin_src cease-ts :exports code
     noReturn :: arg: string:
         return arg; // Doesn't return arg but ends the function nonetheless.
   #+end_src
@@ -679,7 +681,7 @@ Some special cases:
 Calling a function is done through the ~$~ operator, which is one of the ways that functions and pipes are
 differentiated when used.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   returnSelf :: arg: #A, ignored: #B -> A:
       return arg;
 
@@ -688,15 +690,15 @@ differentiated when used.
 ** Closures
 There's nothing strange about closures in Cease except how they're declared:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   // Named closure
-  new closure1: (string) => string = (arg: string) -> string {
+  new closure1: (string) ~> string = (arg: string) -> string {
       return "string";
   };
 
 
   // Using closures as arguments
-  map :: from: #A, morph: (A) => #B -> B:
+  map :: from: #A, morph: (A) ~> #B -> B:
       return morph $ from;
 
   // We don't need to specify the argument and return types when used in an
@@ -740,13 +742,13 @@ If the pipe is chill, the payload must for obvious reasons be ~ref~ or ~mut~ or 
 
 Pipes are used to implement interfaces. An interface can contain only pipes, and indicates the pipe kind.
 
-#+begin_src cease-ts
-  #A |> grabbyMap :: morph: (A) => #B -> B = morph $ self;
+#+begin_src cease-ts :exports code
+  =A |> grabbyMap :: morph: (A) ~> #B -> B = morph $ self;
 
-  ref #A | chillMap :: morph: (ref A) => #B -> B = morph $ self;
+  ref #A | chillMap :: morph: (ref A) ~> #B -> B = morph $ self;
 
   // This still compiles because A is a generic, and ref int satisfies it.
-  #A | otherChillMap :: morph: (A) => #B -> B = morph $ self;
+  #A | otherChillMap :: morph: (A) ~> #B -> B = morph $ self;
 
   // This does NOT compile because int isn't a generic. We need 'ref int' or make
   // it a grabby pipe with |>.
@@ -763,7 +765,7 @@ Pipes are used to implement interfaces. An interface can contain only pipes, and
 Pipes can be evaluated without the payload, which returns a closure. This is particularly useful when a
 procedure expects a closure and we have a pipe ready for that purpose.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   int | pipe :: arg: string -> char = ...;
 
   new pipeClosure: (int) => char = pipe "string";
@@ -786,7 +788,7 @@ as well as terminating the blocks.
 Some blocks may never get to compute a value (e.g. a while block which may not run its body at all). Those
 return ~may A~. Other (if-else) return reliably, so evaluate to some ~A~.
 ** If
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   // Flat
   new val: int = if Expr:
       yield 0;
@@ -818,7 +820,7 @@ Using ~break~ will return from the while loop with a value. Using ~loop~ is the 
 trigger a new condition check. If this fails, the expression given to ~loop~ is used as the resulting value of
 the while block.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   while Expr:
   	 do_shit
   	 yield Expr;
@@ -837,7 +839,7 @@ about the number, use ~for _ToIterator Embedded~. _ToIterator may be an expressi
 ** Switch
 Switching can be done over any expression:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   switch Expression <<
       variant1: CaseBlock;
       variant2:
@@ -848,7 +850,7 @@ Switching can be done over any expression:
 The ~CaseBlock~ terminates with a ~yield~ and is not surrounded by braces. ~_~ is used as a wildcard. Switches
 must be exhaustive. Switching over enums doesn't require the ~--~ operator.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   enum Colour {
   	 green,
   	 red,
@@ -872,7 +874,7 @@ wrapped.
 ** Case
 The ~case~ block is used as a special ~switch~ with only one case:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   case --variant = variable:
 	 yield something;
 #+end_src
@@ -885,7 +887,7 @@ an enum.
 * Error Handling
 Errors are structs defined natively in the compiler:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   struct Error<A> {
   	messages: ...string,
   	base: A,
@@ -902,7 +904,7 @@ is a set of built-in pipes and primitives which work with ~err A~​s. The base 
 an expression of type ~err A~ and either turns it into ~A~ or returns the error with the same base and
 an appended message: ~failingExpr ?? "failed to do X"~. This can be used in a pipe as well:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   variable
   | pipe1 arg ?? "message"
   | pipe2     ?? "message";
@@ -928,7 +930,7 @@ exists: ~debug~. ~say~ is always observed, as is ~sayif <bool> <formatted-str>~.
 
 All these end with a newline. ~print~ and ~printif~ don't not end in a newline but are otherwise identical to
 ~say~ and ~sayif~.
-* [0/1] Package Management
+* TODO Package Management
 Code is split into modules and packages. A module is a file, a package is a directory. Not all directories are
 packages, though all modules must be in a package. That means a package directory may have subdirectories
 which aren't packages.
@@ -952,7 +954,7 @@ therefore recommended that the sections of the package name are tags rather than
 
 This is what a =package.stop= might look like:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   ===
   Package documentation
   ===
@@ -980,8 +982,8 @@ This is what a =package.stop= might look like:
 
 When importing a package/symbol, use the ~use~ keyword:
 
-#+begin_src cease-ts
-  use package/name;                    // symbols therein are now accessible under name:symbol
+#+begin_src cease-ts :exports code
+  use package/name;                    // symbols therein are now accessible under name:>symbol
   use privateName = otherPackage/name; // give the import a name
   use package/name *;                  // Import all symbols natively.
   use package/name symbol1 symbol2;    // Import package name, and symbol1 and symbol2 from it. No need for `self`.
@@ -997,7 +999,7 @@ other packages, make it a ~sec~ in the =package.stop= file: ~sec fn someFunc;~.
 
 To indicate on a struct or data field that this package can see it but other packages cannot, use ~pkg~ before
 the field.
-** TODO [0/15] Core Packages
+** TODO COMMENT [0/15] Core Packages
 *** TODO OS-interaction
 stderr, in, out, command line, exit codes, process IDs, env variables
 *** TODO File
@@ -1041,7 +1043,7 @@ analysis: ~new a: Type = SomeType;~.
 You can access field of a type via the ~=>~ operator. This returns an object of a ~Field~ type. ~Field~ is
 constrained by the parent type, and contains the ~Type~ field:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   struct [Parent: Type] Field<Parent> {
     fieldType: Type
     ...
@@ -1067,13 +1069,13 @@ In addition to ~=>~, you can use the ~field~ pipe:
 This is a built-in pipe which determines the return value at compile time by
 which field is passed:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   new t = SomeType;
   new f1: string = t | field SomeType=>strField;
   new f2: int = t | field SomeType=>intField;
 #+end_src
 ** Package Access
-To access a symbol of an imported package, use the ~:~ operator: ~package:symbol~.
+To access a symbol of an imported package, use the ~:~ operator: ~package:>symbol~.
 ** Associated Functions
 In some languages the concept of an associated function exists whereby as function (not a method) is tied to a
 type. That function must be accessed through the type (think Rust's ~Type::func()~). In Cease we don't have
@@ -1085,8 +1087,8 @@ can be used as a value. The type of this object is the built-in ~Type~.
 ** Reflexive ~Type~, ~Field~, ~Variable~
 Constant objects generated by type definitions are all of the ~Type~ type. There are only a few cases where
 ~Type~​s would be held by variables. One such is during static analysis, where you could have an argument
-~func :: type_: Type~. To pass that value to the function, you just use the name of the type:
-~func $ MyStruct~.
+~func :: type_: Type~. To pass that value to the function, you just use the name of the type:
+~func $ MyStruct~.
 
 ~Type~ contains information about the type like name, fields, annotations if they are available, etc. For
 interfaces it contains all types which implement it (~implementations: ...Type~), for those types it contains
@@ -1100,9 +1102,9 @@ type, use the field access operator: ~MyStruct=>fieldName~. ~Field~ is an enum l
 structs or data of course have a ~type: Type~ field describing the type of the field.
 
 The ~Variable~ reflexive type describes a variable, which in practice means it holds its ~Type~ and its
-current value. To get a ~Variable~ from a variable, use the ~\~ operator:
+current value. To get a ~Variable~ from a variable, use the ~\\~ operator:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   struct MyStruct {
       field: int,
   }
@@ -1110,14 +1112,14 @@ current value. To get a ~Variable~ from a variable, use the ~\~ operator:
   new myStruct: MyStruct = MyStruct << field: 8 >>;
   new myType: Type = MyStruct;
   new myField: Field<MyStruct> = MyStruct=>field;
-  new myVar: Variable = \myStruct;
-  new fieldVar: Variable = \mystruct.field;
+  new myVar: Variable = \\myStruct;
+  new fieldVar: Variable = \\mystruct.field;
 #+end_src
 
 Some built-in operations exist to interact with these types. The most obvious are ~field~ and its related
 pipes.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   ===
   Returns the value of the field given by `field` of the payload.
   The return type is computed during compile time from `field`.
@@ -1157,7 +1159,7 @@ When translated into json, the field will be called ~fieldName~.
 Property values (such as ~fieldName~) are typed. This means the value must conform to a specified type (in
 this case a string). Primitive types can be used, with two exceptions: words needn't be quoted, and booleans
 needn't be supplied at all - either the field has the property, or it does not, though something like
-~apiSettable:true~ is possible. The values can also be enums and function/variable names (given the type
+~apiSettable:>true~ is possible. The values can also be enums and function/variable names (given the type
 ~name~).
 
 For the [[*Database Integration and the Desist Sub-language][Desist sub-language]] (for DB integration), some properties with special types are reserved (such as a
@@ -1165,7 +1167,7 @@ For the [[*Database Integration and the Desist Sub-language][Desist sub-language
 
 To define a new property, we use the ~prop~ keyword. This functions as the ~type~ keyword:
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   prop json word;        // json:firstName
   prop description line; // description:"This is a multi-word description"
   prop apiSettable bool; // apiSettable OR apiSettable:true
@@ -1180,7 +1182,7 @@ To define a new property, we use the ~prop~ keyword. This functions as the ~type
       global,
   }
   // In another package:
-  prop replication dbStuff:ReplicationType; // replication:--local
+  prop replication dbStuff:>ReplicationType; // replication:--local
 #+end_src
 
 You can also assign properties to the 'data' type as a whole.
@@ -1196,7 +1198,7 @@ type, we use the ~%~ operator: ~%A~. This is called a "pure type."
 Free type pipes are pipes with a free type payload. They are sort of associated functions which can be used
 e.g. for constructors.
 
-#+begin_src cease-ts
+#+begin_src cease-ts :exports code
   struct MyStruct {
       field: string,
   }
@@ -1207,7 +1209,105 @@ e.g. for constructors.
   // Note we don't need to use % when using the free type.
   new myStruct = MyStruct | make "field";
 #+end_src
-* TODO Database Integration and the Desist Sub-language
+* TODO COMMENT Database Integration and the Desist Sub-language
+* The Matter of Implementation
+This is the overall context-free grammar for Cease:
+
+~cease ::= program | package~
+
+~program~ is for code files, ~package~ is for the =package.stop= file.
+** Statement and Expression Syntax
+#+begin_src text
+  program             ::= use* ( typeDef | struct | enum | interface | assignment | implementation )*
+
+  use                 ::= 'use ( useDirect | useNamedPkg | useNamedSymbol ) ';'
+  useDirect           ::= literal ( '/' literal )* ('*' | literal+ | Literal+)?
+  useNamedPkg         ::= literal '=' literal ( '/' literal )*
+  useNamedSymbol      ::= literal ( '/' literal )* ( literal '=' ( literal | Literal ) ',' )* literal '=' ( literal | Literal ) ','?
+
+  implementation      ::= implPart? constraints? pipePayloadPart? literal ( ':::' | '::' argumentsPart? '->' returnsPart ':' ) operation* procedureEnd ';'
+  implPart            ::= 'default'? 'impl' packageLiteral generics?
+  pipePayloadPart     ::= bareType generics? ( '|' | '|>' )
+  argumentsPart       ::= ( argPart ',' )* ( argPart ','? )?
+  returnsPart         ::= ( retPart ',' )* ( retPart? ','? )?
+  argPart             ::= literal+ ':' bareType generics?
+  retPart             ::= (literal ':')? bareType generics?
+
+  operation           ::= ( expression | assignment ) ';'
+  terminator          ::= terminatorPart ( expression ',' )* ( expression ','? )?
+  terminatorPart      ::= 'yield' | 'cascade' | 'loop' | 'break'
+  procedureEnd        ::= 'return' ( expression ',' )* ( expression ','? )?
+
+  assignment          ::= valueSetPart | ptrSetPart
+  valueSetPart        ::= ( assignPart literal+ ',' )* assignPart literal+ '=' ( expression ',' )* expression
+  ptrSetPart          ::= 'old' literal '<-' expression
+  assignPart          ::= 'new' | 'old' | 'heap' | 'const'
+
+  enum                ::= constraints? 'enum' Literal generics? '{' enumField+ '}'
+  enumField           ::= literal ( '{' ( '_' | literal ) ':' bareType generics? ',' '}' )? ','
+
+  struct              ::= constraints? 'struct' Literal generics? '{' structField+ '}'
+  structField         ::= 'sec'? literal ':' bareType generics? ','
+
+  typeDef             ::= typeKind literal generics? bareType generics?
+  typeKind            ::= 'prop' | 'type' | 'alias'
+
+  interface           ::= constraint? 'interface' Literal generics? '{' interfacePipe* '}'
+  interfacePipe       ::= 'default'? annotation* 'Self' ( '|' | '|>' ) literal '::' argumentsPart? ( '->' returnsPart )? ';'
+
+  expression          ::= ( call | terminator | block | closureDef ) ';'
+
+  call                ::= ( pipeCall | funcCall ) '___'? ( '?' string )?
+  pipeCall            ::= equality ( ('|' | '|>') packageLiteral callArgumentsPart? )*
+  funcCall            ::= packageLiteral '$' callArgumentsPart?
+  callArgumentsPart   ::= ( equality+ | structExpansion  )
+  structExpansion     ::= '<<' ( literal ':' call ',' )* literal ':' call ','? '>>'
+  closureDef          ::= closureType embedded
+  closureType         ::= '(' argumentsPart? ') ( '~>' returnsPart )?
+
+  block               ::= if | while | for | switch | case
+  if                  ::= 'if' equality ':' operation* terminator ( ';' 'else' 'if' equality ':' operation* terminator )* ( ';' 'else' equality ':' operation* terminator )?
+  while               ::= 'while' equality ':' operation* terminator
+  for                 ::= 'for' ( (literal ',')* literal ','? )? 'in' equality ':' operation* terminator
+  switch              ::= 'switch' equality '<<' switchCase+ '>>'
+  switchCase          ::= matchVariant ':' operation* terminator
+  matchVariant        ::= '--' ( '(' packageLiteral ')' )? literal matchExpansion?
+  matchExpansion      ::= '<<' ( '_' ':' call | ( (literal ':' call ',')* literal ':' call ','? ) ) '>>'
+  case                ::= 'case' matchVariant '=' value ':' operation* terminator
+
+  equality            ::= comparison ( ('==' | '!=') comparison )?
+  comparison          ::= logic ( ('<' | '>' | '<=' | '>=') logic )?
+  logic               ::= sum ( ('and' | 'nand' | 'or' | 'xor') sum )*
+  sum                 ::= product ( ('+' | '-') product )*
+  product             ::= value ( ('*' | '/') value )*
+  value               ::= unary | variant
+  variant             ::= '--' ( '(' packageLiteral ')' )? Literal structExpansion?
+  unary               ::= ( '-' | 'not' | '&' | '*' )? access
+  access              ::= ( base (':>' | '.' | '=>') )* base
+
+  base                ::= literal | Literal | builtin | embedded | '(' expression ')'
+  builtin             ::= number | string | char | range | array | 'Embedded' | 'Program'
+  range               ::= '((' (packageLiteral | number)? '..' '<'? (packageLiteral | number) '))'
+  array               ::= '[[' ( expression ',' )* expression ','? ']]'
+  embedded            ::= ( '{' operation* procedureEnd ';' '}' ) | ( prodecureEnd )
+
+  bareType            ::= annotation* hint? packageLiteral
+  generics            ::= '<' ( bareType ',' )* bareType ','? '>'
+  annotation          ::= 'into' | 'fun' | 'may' | 'itr' | 'err' | 'ark' | 'ptr' | 'mut' | 'ref' | '=' | '>' | '?' | '>>' | '!' | '^' | '~' | '*' | '&' | '...'
+  hint                ::= '_' | '#' | '@' | '%'
+  packageLiteral      ::= ( literal ':>' )* ( Literal | literal )
+  constraints         ::= '[' ( bareType ':' bareType generics? ',' )* bareType ':' bareType generics? ','? ']'
+#+end_src
+** Package File Syntax
+#+begin_src text
+  package         ::= packageName ';' ( (exportType | exportInterface | exportFunc | exportProperty) ';' )*
+
+  packageName     ::= 'package' literal ( '/' literal )*
+  exportType      ::= 'type' ( literal | Literal )
+  exportInterface ::= 'interface' Literal
+  exportFunc      ::= 'fn' literal
+  exportProperty  ::= 'prop' literal
+#+end_src
 * COMMENT File config
 #  LocalWords:  config unfontified centric untyped Json monadic struct async Structs Enums src pointerVar
 #  LocalWords:  whitespace natively speeeeed nullability enum unowned structs enums Yaml prepended prepend
