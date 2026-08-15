@@ -1220,42 +1220,42 @@ This is the overall context-free grammar for Cease:
 #+begin_src text
   program             ::= use* ( typeDef | struct | enum | interface | assignment | implementation )*
 
-  use                 ::= 'use ( useDirect | useNamedPkg | useNamedSymbol ) ';'
-  useDirect           ::= literal ( '/' literal )* ('*' | literal+ | Literal+)?
+  use                 ::= 'use ( useDirect | useNamedPkg ) ';'
+  useDirect           ::= literal ( '/' literal )* ('*' | literal+ | Literal+ | namedSymbol+ )?
   useNamedPkg         ::= literal '=' literal ( '/' literal )*
-  useNamedSymbol      ::= literal ( '/' literal )* ( literal '=' ( literal | Literal ) ',' )* literal '=' ( literal | Literal ) ','?
+  namedSymbol         ::= ( literal '=' ( literal | Literal ) ',' )* literal '=' ( literal | Literal ) ','?
 
-  implementation      ::= implPart? constraints? pipePayloadPart? literal ( ':::' | '::' argumentsPart? '->' returnsPart ':' ) operation* procedureEnd ';'
-  implPart            ::= 'default'? 'impl' packageLiteral generics?
-  pipePayloadPart     ::= bareType generics? ( '|' | '|>' )
+  implementation      ::= implPart? generics? pipePayloadPart? literal ( ':::' | '::' argumentsPart? '->' returnsPart ':' ) operation* procedureEnd ';'
+  implPart            ::= 'default'? 'impl' packageLiteral constraints?
+  pipePayloadPart     ::= bareType constraints? ( '|' | '|>' )
   argumentsPart       ::= ( argPart ',' )* ( argPart ','? )?
   returnsPart         ::= ( retPart ',' )* ( retPart? ','? )?
-  argPart             ::= literal+ ':' bareType generics?
-  retPart             ::= (literal ':')? bareType generics?
+  argPart             ::= literal+ ':' bareType constraints?
+  retPart             ::= (literal ':')? bareType constraints?
 
   operation           ::= ( expression | assignment ) ';'
   terminator          ::= terminatorPart ( expression ',' )* ( expression ','? )?
-  terminatorPart      ::= 'yield' | 'cascade' | 'loop' | 'break'
+  terminatorPart      ::= 'yield' | 'cascade' | 'loop' | 'break' | 'return'
   procedureEnd        ::= 'return' ( expression ',' )* ( expression ','? )?
 
   assignment          ::= valueSetPart | ptrSetPart
-  valueSetPart        ::= ( assignPart literal+ ',' )* assignPart literal+ '=' ( expression ',' )* expression
-  ptrSetPart          ::= 'old' literal '<-' expression
+  valueSetPart        ::= ( assignPart access+ ',' )* assignPart access+ '=' ( expression ',' )* expression
+  ptrSetPart          ::= 'old' access '<-' expression
   assignPart          ::= 'new' | 'old' | 'heap' | 'const'
 
-  enum                ::= constraints? 'enum' Literal generics? '{' enumField+ '}'
-  enumField           ::= literal ( '{' ( '_' | literal ) ':' bareType generics? ',' '}' )? ','
+  enum                ::= generics? 'enum' Literal constraints? '{' enumField+ '}'
+  enumField           ::= literal ( '{' ( '_' | literal ) ':' bareType constraints? ',' '}' )? ','
 
-  struct              ::= constraints? 'struct' Literal generics? '{' structField+ '}'
-  structField         ::= 'sec'? literal ':' bareType generics? ','
+  struct              ::= generics? 'struct' Literal constraints? '{' structField+ '}'
+  structField         ::= 'sec'? literal ':' bareType constraints? ','
 
-  typeDef             ::= typeKind literal generics? bareType generics?
+  typeDef             ::= typeKind literal constraints? bareType constraints?
   typeKind            ::= 'prop' | 'type' | 'alias'
 
-  interface           ::= constraint? 'interface' Literal generics? '{' interfacePipe* '}'
+  interface           ::= generics? 'interface' Literal constraints? '{' interfacePipe* '}'
   interfacePipe       ::= 'default'? annotation* 'Self' ( '|' | '|>' ) literal '::' argumentsPart? ( '->' returnsPart )? ';'
 
-  expression          ::= ( call | terminator | block | closureDef ) ';'
+  expression          ::= ( call | procedureEnd | block | closureDef ) ';'
 
   call                ::= ( pipeCall | funcCall ) '___'? ( '?' string )?
   pipeCall            ::= equality ( ('|' | '|>') packageLiteral callArgumentsPart? )*
@@ -1268,7 +1268,7 @@ This is the overall context-free grammar for Cease:
   block               ::= if | while | for | switch | case
   if                  ::= 'if' equality ':' operation* terminator ( ';' 'else' 'if' equality ':' operation* terminator )* ( ';' 'else' equality ':' operation* terminator )?
   while               ::= 'while' equality ':' operation* terminator
-  for                 ::= 'for' ( (literal ',')* literal ','? )? 'in' equality ':' operation* terminator
+  for                 ::= 'for' ( (literal ',')* literal ','? 'in' )? equality ':' operation* terminator
   switch              ::= 'switch' equality '<<' switchCase+ '>>'
   switchCase          ::= matchVariant ':' operation* terminator
   matchVariant        ::= '--' ( '(' packageLiteral ')' )? literal matchExpansion?
@@ -1283,20 +1283,20 @@ This is the overall context-free grammar for Cease:
   value               ::= unary | variant
   variant             ::= '--' ( '(' packageLiteral ')' )? Literal structExpansion?
   unary               ::= ( '-' | 'not' | '&' | '*' )? access
-  access              ::= ( base (':>' | '.' | '=>') )* base
+  access              ::= base ( (':>' | '.' | '=>') base )*
 
   base                ::= literal | Literal | builtin | embedded | '(' expression ')'
-  builtin             ::= number | string | char | range | array | 'Embedded' | 'Program'
+  builtin             ::= number | string | char | boolean | range | array | 'Embedded' | 'Program' | 'void'
   range               ::= '((' (packageLiteral | number)? '..' '<'? (packageLiteral | number) '))'
   array               ::= '[[' ( expression ',' )* expression ','? ']]'
   embedded            ::= ( '{' operation* procedureEnd ';' '}' ) | ( prodecureEnd )
 
   bareType            ::= annotation* hint? packageLiteral
-  generics            ::= '<' ( bareType ',' )* bareType ','? '>'
+  constraints         ::= '<' ( bareType ',' )* bareType ','? '>'
   annotation          ::= 'into' | 'fun' | 'may' | 'itr' | 'err' | 'ark' | 'ptr' | 'mut' | 'ref' | '=' | '>' | '?' | '>>' | '!' | '^' | '~' | '*' | '&' | '...'
   hint                ::= '_' | '#' | '@' | '%'
   packageLiteral      ::= ( literal ':>' )* ( Literal | literal )
-  constraints         ::= '[' ( bareType ':' bareType generics? ',' )* bareType ':' bareType generics? ','? ']'
+  generics            ::= '[' ( Literal ':' bareType constraints? ',' )* Literal ':' bareType constraints? ','? ']'
 #+end_src
 ** Package File Syntax
 #+begin_src text

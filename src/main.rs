@@ -1,7 +1,7 @@
 use clap::Parser;
 
 mod command_line;
-mod expression;
+mod grammar;
 mod tokeniser;
 mod util;
 
