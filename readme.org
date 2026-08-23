@@ -1211,9 +1211,8 @@ e.g. for constructors.
 #+end_src
 * TODO COMMENT Database Integration and the Desist Sub-language
 * The Matter of Implementation
-This is the overall context-free grammar for Cease:
-
-~cease ::= program | package~
+The Cease compiler parses files using the recursive descend algorithm (with an occasional 1-lookahead). This
+is the overall context-free grammar for Cease: ~cease ::= program | package~
 
 ~program~ is for code files, ~package~ is for the =package.stop= file.
 ** Statement and Expression Syntax
@@ -1300,7 +1299,7 @@ This is the overall context-free grammar for Cease:
 #+end_src
 ** Package File Syntax
 #+begin_src text
-  package         ::= packageName ';' ( (exportType | exportInterface | exportFunc | exportProperty) ';' )*
+  package         ::= packageName ';' ( 'pkg'? (exportType | exportInterface | exportFunc | exportProperty) ';' )*
 
   packageName     ::= 'package' literal ( '/' literal )*
   exportType      ::= 'type' ( literal | Literal )

@@ -12,8 +12,11 @@ pub fn parse_file(file_path: &Path) -> Result<VecDeque<Token>, CeaseError> {
     let file_name = file_path.to_str().expect("File has no name?");
 
     let file = File::open(file_path).map_err(|e| {
-        let message = format!("Failed to open file {file_name}: {e}");
-        CeaseError::lexer(message, ErrorLocation::File(file_path.to_path_buf()))
+        let error = LexerError::CannotOpenFile {
+            file_name: file_name.to_string(),
+            error: e.to_string(),
+        };
+        CeaseError::lexer(error, ErrorLocation::File(file_path.to_path_buf()))
     })?;
 
     let file_lines = io::BufReader::new(file).lines();
@@ -25,7 +28,7 @@ pub fn parse_file(file_path: &Path) -> Result<VecDeque<Token>, CeaseError> {
 ///
 /// Separated so that `parse_file` can be used in `main` and `parse_input` more
 /// generally in tests.
-fn parse_input<Lines>(
+pub fn parse_input<Lines>(
     input: Lines,
     file_name: &str,
     file_path: &Path,
@@ -37,8 +40,11 @@ where
 
     for (line_index, line) in input.into_iter().enumerate() {
         let line = line.map_err(|e| {
-            let message = format!("Failed to read line from file {file_name}: {e}");
-            CeaseError::lexer(message, ErrorLocation::File(file_path.to_path_buf()))
+            let error = LexerError::CannotReadLine {
+                file_name: file_name.to_string(),
+                error: e.to_string(),
+            };
+            CeaseError::lexer(error, ErrorLocation::File(file_path.to_path_buf()))
         })?;
 
         let mut line_length = 0;
@@ -390,6 +396,64 @@ two line documentation"#;
             tokens[0]
         );
         check_token!(position!(path(), 2, 1, 2, 2), TokenKind::Int(20), tokens[1]);
+    }
+
+    #[test]
+    fn package_name_correct() {
+        let tokens = parse("a/b/c");
+        check_length!(5, tokens);
+        check_token!(
+            position!(path(), 1, 1, 1, 1),
+            TokenKind::Literal(String::from("a")),
+            &tokens[0]
+        );
+        check_token!(
+            position!(path(), 1, 2, 1, 2),
+            TokenKind::Symbol(Symbol::Slash),
+            &tokens[1]
+        );
+        check_token!(
+            position!(path(), 1, 3, 1, 3),
+            TokenKind::Literal(String::from("b")),
+            &tokens[2]
+        );
+        check_token!(
+            position!(path(), 1, 4, 1, 4),
+            TokenKind::Symbol(Symbol::Slash),
+            &tokens[3]
+        );
+        check_token!(
+            position!(path(), 1, 5, 1, 5),
+            TokenKind::Literal(String::from("c")),
+            &tokens[4]
+        );
+    }
+
+    #[test]
+    fn package_name_wrong() {
+        let tokens = parse("a/8/c");
+        check_length!(5, tokens);
+        check_token!(
+            position!(path(), 1, 1, 1, 1),
+            TokenKind::Literal(String::from("a")),
+            &tokens[0]
+        );
+        check_token!(
+            position!(path(), 1, 2, 1, 2),
+            TokenKind::Symbol(Symbol::Slash),
+            &tokens[1]
+        );
+        check_token!(position!(path(), 1, 3, 1, 3), TokenKind::Int(8), &tokens[2]);
+        check_token!(
+            position!(path(), 1, 4, 1, 4),
+            TokenKind::Symbol(Symbol::Slash),
+            &tokens[3]
+        );
+        check_token!(
+            position!(path(), 1, 5, 1, 5),
+            TokenKind::Literal(String::from("c")),
+            &tokens[4]
+        );
     }
 
     #[test]

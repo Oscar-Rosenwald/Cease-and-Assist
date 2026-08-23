@@ -55,10 +55,11 @@ enum StageKind {
     ///
     /// A symbol candiddate may follow a [`StageKind::Normal`] lexime with no
     /// space. E.g. in variable names with an underscore: `variable_name`. In
-    /// such a case, the symbol candidate is `_` and `variable` is kept. If we
-    /// then follow with `__`, we'll turn those two into: `variable` and `___`.
-    /// If a letter follows (`n` in this case), we'll treat the symbol candidate
-    /// as a [`StageKind::Normal`] lexime.
+    /// such a case, the symbol candidate is `_` and `variable` is kept
+    /// unprocessed. If we then follow with `__`, we'll turn those two into:
+    /// `variable` and `___`. If a letter follows (`n` in this case), we'll
+    /// treat the symbol candidate as a [`StageKind::Normal`] lexime, so
+    /// `variant_name`.
     SymbolCandidate {
         /// When valid, this is the part of the current lexime which is a normal
         /// name, e.g. of a variable. When invalid, there is no such name.
@@ -158,7 +159,12 @@ impl Stage {
             StageKind::SymbolCandidate {
                 non_symbol_snippet,
                 candidate,
-            } => self.push_char_to_symbol_candidate(new_char, non_symbol_snippet, candidate),
+            } => self.push_char_to_symbol_candidate(
+                new_char,
+                non_symbol_snippet,
+                candidate,
+                location,
+            ),
             StageKind::String { escaped, snippet } => {
                 self.last_seen_location = location;
                 let (new_str, processed_tokens) =
@@ -226,7 +232,7 @@ impl Stage {
                 let token = match non_symbol_snippet {
                     None => {
                         let error = CeaseError::syntax(
-                            "Invalid name or unfinished symbol",
+                            SyntaxError::InvalidNameOrSymbol,
                             ErrorLocation::Position(self.position()),
                         );
                         Token::failing(
@@ -311,7 +317,7 @@ impl Stage {
                 };
 
                 let error_location = ErrorLocation::Position(self.position());
-                let error = CeaseError::syntax("Invalid symbol.", error_location);
+                let error = CeaseError::syntax(SyntaxError::InvalidSymbol, error_location);
                 let token = Token::failing(
                     error_message,
                     IntendedTokenKind::Other,
@@ -325,10 +331,7 @@ impl Stage {
                 snippet,
             } => {
                 let error_location = ErrorLocation::Position(self.position());
-                let error = CeaseError::syntax(
-                    "Unterminated string. Try a quote, dumbarse.",
-                    error_location,
-                );
+                let error = CeaseError::syntax(SyntaxError::UnterminatedString, error_location);
                 let token =
                     Token::failing(snippet, IntendedTokenKind::String, self.position(), error);
                 vec![token]
@@ -338,8 +341,7 @@ impl Stage {
                 snippet,
             } => {
                 let error_location = ErrorLocation::Position(self.position());
-                let error =
-                    CeaseError::syntax("Unterminated char. Try a quote, dumbarse.", error_location);
+                let error = CeaseError::syntax(SyntaxError::UnterminatedChar, error_location);
                 let token =
                     Token::failing(snippet, IntendedTokenKind::Char, self.position(), error);
                 vec![token]
@@ -349,10 +351,8 @@ impl Stage {
                 snippet,
             } => {
                 let error_location = ErrorLocation::Position(self.position());
-                let error = CeaseError::syntax(
-                    "Unterminated documentation block. Try ending it? With a === maybe? Jesus Christ.",
-                    error_location,
-                );
+                let error =
+                    CeaseError::syntax(SyntaxError::UnterminatedDocumentation, error_location);
                 let token = Token::failing(
                     snippet,
                     IntendedTokenKind::Documentation,
@@ -477,6 +477,7 @@ impl Stage {
                 let token_kind = TokenKind::Symbol(symbol_candidate);
                 let token = Token::new(token_kind, self.position());
                 let mut tokens = vec![token];
+                self.kind = StageKind::default();
                 tokens.append(&mut self.push_char(new_char, end_location));
 
                 return (std::mem::take(&mut self.kind), tokens);
@@ -501,7 +502,7 @@ impl Stage {
                     );
                 }
                 symbol => {
-                    self.last_seen_location = end_location.clone();
+                    self.last_seen_location = end_location;
                     let token = Token::new(TokenKind::Symbol(symbol), self.position());
                     return (StageKind::Whitespace, vec![token]);
                 }
@@ -527,14 +528,34 @@ impl Stage {
         new_char: char,
         snippet: Option<String>,
         symbol_candidate: Symbol,
+        end_location: FileLocation,
     ) -> (StageKind, Vec<Token>) {
-        let candidate_str = symbol_candidate.to_string();
+        println!(
+            "___ Pushing char {new_char} to symbol candidate {}{}",
+            snippet.clone().unwrap_or(String::new()),
+            symbol_candidate
+        );
+        if ';' == new_char {
+            let error_token = Token::failing(
+                symbol_candidate.to_string(),
+                IntendedTokenKind::Char,
+                self.position(),
+                CeaseError::syntax(
+                    SyntaxError::InvalidSymbol,
+                    ErrorLocation::Position(self.position()),
+                ),
+            );
+
+            let position =
+                Position::new(self.file_path.clone(), end_location.clone(), end_location);
+
+            let semicolon_token = Token::new(TokenKind::Symbol(Symbol::Semicolon), position);
+            return (StageKind::Whitespace, vec![error_token, semicolon_token]);
+        }
+
         let mut snippet = match snippet {
-            None => candidate_str,
-            Some(mut s) => {
-                s.push_str(&candidate_str);
-                s
-            }
+            None => symbol_candidate.to_string(),
+            Some(s) => format!("{s}{}", symbol_candidate.to_string()),
         };
 
         match Symbol::parse_char(Some(&snippet), new_char) {
@@ -577,10 +598,7 @@ impl Stage {
                 }
                 Err(_) => {
                     let error_location = ErrorLocation::Position(self.position());
-                    let error = CeaseError::syntax(
-                        "Too many characters in this character. Try one.",
-                        error_location,
-                    );
+                    let error = CeaseError::syntax(SyntaxError::CharTooLong, error_location);
                     let token =
                         Token::failing(snippet, IntendedTokenKind::Char, self.position(), error);
                     return (None, vec![token]);
@@ -622,7 +640,10 @@ impl Stage {
     ) -> (StageKind, Vec<Token>) {
         let token_kind = match Keyword::from_str(&snippet) {
             Ok(keyword) => TokenKind::Keyword(keyword),
-            Err(_) => TokenKind::Literal(snippet),
+            _ => match u64::from_str(&snippet) {
+                Ok(number) => TokenKind::Int(number),
+                Err(_) => TokenKind::Literal(snippet),
+            },
         };
 
         let token = Token::new(token_kind, self.position());

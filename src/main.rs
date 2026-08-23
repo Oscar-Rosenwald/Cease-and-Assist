@@ -14,10 +14,7 @@ fn main() -> Result<(), util::CeaseError> {
     })?;
 
     let tokens = tokeniser::tokeniser::parse_file(&args.file)?;
-
-    for token in tokens {
-        println!("{token}");
-    }
+    let _syntax_tree = grammar::parse_tokens(tokens);
 
     Ok(())
 }
