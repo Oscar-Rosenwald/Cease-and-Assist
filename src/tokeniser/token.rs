@@ -2,6 +2,7 @@ use super::*;
 use std::fmt::Debug;
 use std::str::FromStr;
 
+#[derive(PartialEq, Eq)]
 pub struct Token {
     pub position: Position,
     pub kind: TokenKind,
@@ -11,7 +12,7 @@ pub struct Token {
 pub enum TokenKind {
     Error {
         snippet: String,
-        errors: Vec<CeaseError>,
+        error: CeaseError,
         intended_kind: IntendedTokenKind,
     },
     Literal(String),
@@ -349,23 +350,15 @@ impl std::fmt::Display for TokenKind {
         match self {
             Self::Error {
                 snippet,
-                errors,
+                error,
                 intended_kind: _,
-            } => write!(
-                f,
-                "{snippet}: {}",
-                errors
-                    .iter()
-                    .map(|e| format!("{e}"))
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            ),
+            } => write!(f, "{snippet}: {error}",),
             Self::Literal(literal) => write!(f, "{literal}"),
-            Self::Documentation(documentation) => write!(f, "{documentation}"),
-            Self::String(sentense) => write!(f, "{sentense}"),
-            Self::Char(character) => write!(f, "{character}"),
-            Self::Keyword(keyword) => write!(f, "{keyword}"),
-            Self::Symbol(symbol) => write!(f, "{symbol}"),
+            Self::Documentation(documentation) => write!(f, "=== {documentation} ==="),
+            Self::String(sentense) => write!(f, "\"{sentense}\""),
+            Self::Char(character) => write!(f, "'{character}'"),
+            Self::Keyword(keyword) => write!(f, "`{keyword}`"),
+            Self::Symbol(symbol) => write!(f, "`{symbol}`"),
             Self::Int(value) => write!(f, "{value}"),
         }
     }
@@ -373,7 +366,7 @@ impl std::fmt::Display for TokenKind {
 
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.position, self.kind)
+        write!(f, "{}", self.kind)
     }
 }
 
@@ -391,11 +384,32 @@ impl Token {
         Self {
             kind: TokenKind::Error {
                 snippet: error_snippet,
-                errors: vec![error],
+                error,
                 intended_kind: intended_token_kind,
             },
             position,
         }
+    }
+
+    pub fn find_errors(tokens: &VecDeque<Self>) -> Option<Vec<(String, CeaseError)>> {
+        let mut ret_errors = Vec::new();
+
+        for token in tokens {
+            if let TokenKind::Error {
+                snippet,
+                error,
+                intended_kind: _,
+            } = &token.kind
+            {
+                ret_errors.push((snippet.clone(), error.clone()));
+            };
+        }
+
+        if ret_errors.is_empty() {
+            return None;
+        }
+
+        return Some(ret_errors);
     }
 }
 
@@ -530,14 +544,14 @@ impl Debug for Token {
             TokenKind::Int(_) => "int",
             TokenKind::Error {
                 snippet,
-                errors,
+                error,
                 intended_kind,
             } => {
-                let (error_location, error_summaries) = Error::vec_to_debug(errors);
+                let (error_location, error_summary) = Error::debug(error);
                 return write!(
                     f,
                     "(error {:?}) {error_location}: {snippet} - {:?}",
-                    intended_kind, error_summaries,
+                    intended_kind, error_summary,
                 );
             }
         };

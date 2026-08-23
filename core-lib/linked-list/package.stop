@@ -1,12 +1,29 @@
 package core/linkedList;
 
+=== A linked list implementation which requires at least one element to be present. ===
 type LinkedList<#A>;
 
+=== Construct a new `LinkedList` object with 1 element `value` ===
 fn make;
+
+===
+Returns the last element of the list.
+Since the list is not allowed to be empty, the last element is always valid.
+===
 fn last;
+
+=== Add `value` to the end of the list. Returns the list for chaining. ===
 fn append;
+
+=== Add `value` to the beginning of the list. Return the list for chaining. ===
 fn prepend;
+
+===
+Returns a reference to the node whose value matches
+`value`, or `void` if none such exists.
+===
 fn find;
+
 fn insertAfter;
 fn update;
 fn locate;

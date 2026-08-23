@@ -6,6 +6,9 @@ type Any<T> = Option<Vec<T>>;
 /// A list of 1 or more elements.
 type Some<T> = Vec<T>;
 
+/// A user error wrapper.
+pub(super) type Parsed<T> = Result<T, CeaseError>;
+
 /// Describes the set of tokens of a Cease file ordered and structured according
 /// to the Cease grammar.
 pub enum Cease {
@@ -17,11 +20,12 @@ pub enum Cease {
 }
 
 /// Objects describing general type syntax such as type hints.
-mod types {
+pub(super) mod types {
     use super::*;
 
     /// Type annotations such as `mut` or `may`.
-    pub(super) enum Annotation {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Annotation {
         Into,
         Function,
         Maybe,
@@ -35,7 +39,8 @@ mod types {
     }
 
     /// Type hints such as `_` or `#`.
-    pub(super) enum Hint {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Hint {
         Interface,
         Generic,
         Enum,
@@ -43,22 +48,25 @@ mod types {
     }
 
     /// A type constraint: `<#A>` or `<B, may str>`
-    pub(super) type Constraint = BareType;
+    pub type Constraint = BareType;
 
     /// A generic declaration: `[A: _io:>IoReader]`
-    pub(super) struct Generic {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Generic {
         name: Token,
         type_: BareType,
         constraints: Any<Constraint>,
     }
 
     /// Access to a package symbol: `core:>io:>File` or just `str`.
-    pub(super) struct PackageLiteral {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct PackageLiteral {
         packages: Any<Token>,
         package_symbol: Token,
     }
 
-    pub(super) struct BareType {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct BareType {
         annotations: Any<Annotation>,
         hint: Option<Hint>,
         name: PackageLiteral,
@@ -66,14 +74,16 @@ mod types {
 }
 
 /// Objects describing built-in or basic syntax such as strings.
-mod lang {
+pub(super) mod lang {
     use super::*;
 
-    pub(super) struct Base {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Base {
         position: Position,
         kind: BaseKind,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum BaseKind {
         Literal(Token),
         Builtin(Builtin),
@@ -82,25 +92,29 @@ mod lang {
         ProgramLiteral,  // The word Program, not the {...} block (that's a Builtin).
     }
 
-    pub(super) struct Range {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Range {
         start: Option<(RangeBoundary, Position)>,
         kind: RangeKind,
         end: RangeBoundary,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum RangeBoundary {
         Number(u64),
         Value(types::PackageLiteral),
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum RangeKind {
         Inclusive,
         Exclusive,
     }
 
-    pub(super) type Array = Any<precedence::Equality>;
+    pub type Array = Any<precedence::Equality>;
 
-    pub(super) enum Builtin {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Builtin {
         Number(u64),
         String(String),
         Char(char),
@@ -109,38 +123,44 @@ mod lang {
         Void,
     }
 
-    pub(super) struct Embedded {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Embedded {
         operations: Any<statement::Operation>,
         terminator: statement::ProcedureEnd,
     }
 
-    pub(super) struct Program {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Program {
         operations: Any<statement::Operation>,
     }
 }
 
 /// Objects which encode the precedence of operations. Generic stuff like
 /// products or data access etc.
-mod precedence {
+pub(super) mod precedence {
     use super::*;
 
-    pub(super) struct Equality {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Equality {
         position: Position,
         base: Comparison,
         rest: Option<(EqualityKind, Comparison)>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum EqualityKind {
         Equals,
         NotEquals,
     }
 
-    pub(super) struct Comparison {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Comparison {
         position: Position,
         base: Logic,
         rest: Option<(ComparisonKind, Logic)>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum ComparisonKind {
         Lesser,
         Greater,
@@ -148,12 +168,14 @@ mod precedence {
         GreaterOrEqual,
     }
 
-    pub(super) struct Logic {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Logic {
         position: Position,
         base: Sum,
         rest: Any<(LogicKind, Sum)>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum LogicKind {
         And,
         Nand,
@@ -161,39 +183,46 @@ mod precedence {
         Xor,
     }
 
-    pub(super) struct Sum {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Sum {
         position: Position,
         base: Product,
         rest: Any<(SumKind, Product)>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum SumKind {
         Plus,
         Minus,
     }
 
-    pub(super) struct Product {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Product {
         position: Position,
         base: Value,
         rest: Any<(ProductKind, Value)>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum ProductKind {
         Multiply,
         Divide,
     }
 
-    pub(super) enum Value {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Value {
         Unary(Unary),
         Variant(Variant),
     }
 
-    pub(super) struct Unary {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Unary {
         position: Position,
         kind: Option<UnaryKind>,
         base: Access,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum UnaryKind {
         Negative,
         Negate,
@@ -201,13 +230,15 @@ mod precedence {
         Dereference,
     }
 
-    pub(super) struct Variant {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Variant {
         position: Position,
         enum_name: Option<types::PackageLiteral>,
         variant_name: Token,
         variant_inner_values: Any<VariantInnerValue>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct VariantInnerValue {
         field_name: Token,
         name_bound_to: Option<Token>,
@@ -220,11 +251,13 @@ mod precedence {
     // dumbg like
     //
     //   Type=>field:>symbol
-    pub(super) struct Access {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Access {
         base: lang::Base,
         rest: Any<(AccessKind, lang::Base)>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum AccessKind {
         Package,
         Data,
@@ -233,30 +266,35 @@ mod precedence {
 }
 
 /// Objects which have to do with generic statements.
-mod statement {
+pub(super) mod statement {
     use super::*;
 
-    pub(super) enum Operation {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Operation {
         Expression(expression::Expression),
         Assignment(Assignment),
     }
 
-    pub(super) struct Assignment {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Assignment {
         position: Position,
         target: AssignmentTarget,
         new_values: Some<expression::Expression>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum AssignmentTarget {
         Values(Some<AssignmentTargetValue>), // new a, old b c.d =
         Pointer(precedence::Access),         // old a:>b.c <-
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct AssignmentTargetValue {
         designation: TargetValueDesignation,
         targets: Some<precedence::Access>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum TargetValueDesignation {
         New,
         Old,
@@ -264,22 +302,25 @@ mod statement {
         Constant,
     }
 
-    pub(super) struct ProcedureEnd {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct ProcedureEnd {
         position: Position,
         values: Any<expression::Expression>,
     }
 }
 
 /// Expressions which contain other expressions.
-mod block {
+pub(super) mod block {
     use super::*;
 
-    pub(super) struct Block {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Block {
         position: Position,
         kind: BlockKind,
         terminator: BlockTerminator,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum BlockKind {
         If(If),
         While(While),
@@ -288,12 +329,14 @@ mod block {
         Case(Case),
     }
 
-    pub(super) struct BlockTerminator {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct BlockTerminator {
         position: Position,
         kind: TerminatorKind,
         values: Any<expression::Expression>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum TerminatorKind {
         Yield,
         Cascade,
@@ -302,46 +345,54 @@ mod block {
         Return,
     }
 
-    pub(super) struct If {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct If {
         condition: precedence::Equality,
         operations: Any<statement::Operation>,
         else_ifs: Any<If>,
         else_: Option<(Any<statement::Operation>, BlockTerminator)>,
     }
 
-    pub(super) struct While {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct While {
         condition: precedence::Equality,
         operations: Any<statement::Operation>,
     }
 
-    pub(super) struct For {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct For {
         range_over: precedence::Equality,
         range_values: Any<Token>,
         operations: Any<statement::Operation>,
     }
 
-    pub(super) struct Switch {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Switch {
         root: precedence::Equality,
         cases: Some<SwitchCase>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct SwitchCase {
         variant: precedence::Value,
         operations: Any<statement::Operation>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct Variant {
         enum_name: Option<types::PackageLiteral>,
         name: Token,
         expansions: Any<VariantExpansion>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum VariantExpansion {
         SingleValue(call::Call),
         Named(Some<(Token, Option<call::Call>)>),
     }
 
-    pub(super) struct Case {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Case {
         target_variant: Variant,
         root: precedence::Value,
         operations: Any<statement::Operation>,
@@ -349,35 +400,41 @@ mod block {
 }
 
 /// Expressions consisting of procedure calls.
-mod call {
+pub(super) mod call {
     use super::*;
 
-    pub(super) struct Call {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Call {
         position: Position,
         debug_print: bool,
         abort_error: ErrorAbort,
         kind: CallKind,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum CallKind {
         Pipe(PipeCall),
         Func(FunctionCall),
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum CallArguments {
         Bare(Some<precedence::Equality>),
         Named(Some<(Token, Call)>),
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct ErrorAbort {
         position: Position,
         error_message: String,
     }
 
-    pub(super) struct PipeCall {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct PipeCall {
         payload: precedence::Equality,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct Pipe {
         position: Position,
         kind: procedure::PipeKind,
@@ -385,7 +442,8 @@ mod call {
         arguments: Option<CallArguments>,
     }
 
-    pub(super) struct FunctionCall {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct FunctionCall {
         position: Position,
         name: Token,
         arguments: Option<CallArguments>,
@@ -393,60 +451,70 @@ mod call {
 }
 
 /// Procedure definitions inlcuding the body.
-mod procedure {
+pub(super) mod procedure {
     use super::*;
 
-    pub(super) struct Argument {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Argument {
         names: Some<Token>,
         type_: types::BareType,
     }
 
-    pub(super) struct Result {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Result {
         names: Any<Token>,
         type_: types::BareType,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct Signature {
         arguments: Any<Argument>,
         results: Any<Result>,
     }
 
-    pub(super) struct Closure {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Closure {
         arguments: Any<Argument>,
         results: Any<Result>,
         operations: lang::Embedded,
     }
 
-    pub(super) struct Implementation {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Implementation {
         position: Position,
         preamble: Option<ImplementationPreamble>,
         pipe: Pipe,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct ImplementationPreamble {
         default: bool,
         interface: types::PackageLiteral,
         constraints: Any<types::Constraint>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct Pipe {
         generics: Any<types::Generic>,
         payload: Option<Payload>,
         function: Function,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct Payload {
         payload: types::BareType,
         constraints: Any<types::Constraint>,
         pipe_kind: PipeKind,
     }
 
-    pub(super) enum PipeKind {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum PipeKind {
         Chill,
         Grabby,
     }
 
-    pub(super) struct Function {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Function {
         name: Token,
         signature: Option<Signature>,
         operations: Any<statement::Operation>,
@@ -455,10 +523,11 @@ mod procedure {
 }
 
 /// Definitions of types.
-mod type_def {
+pub(super) mod type_def {
     use super::*;
 
-    pub(super) struct Enum {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Enum {
         position: Position,
         generics: Any<types::Generic>,
         name: Token,
@@ -466,12 +535,14 @@ mod type_def {
         fields: Some<EnumField>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct EnumField {
         position: Position,
         name: Token,
         kind: EnumFieldKind,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum EnumFieldKind {
         Bare,
         Anonymous {
@@ -485,7 +556,8 @@ mod type_def {
         },
     }
 
-    pub(super) struct Struct {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Struct {
         position: Position,
         generics: Any<types::Generic>,
         name: Token,
@@ -493,6 +565,7 @@ mod type_def {
         fields: Some<StructField>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct StructField {
         position: Position,
         package_local: bool,
@@ -501,7 +574,8 @@ mod type_def {
         constraints: Any<types::Constraint>,
     }
 
-    pub(super) struct TypeDef {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct TypeDef {
         position: Position,
         kind: TypeKind,
         name: Token,
@@ -510,13 +584,15 @@ mod type_def {
         old_constraints: Any<types::Constraint>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum TypeKind {
         Property,
         Type,
         Alias,
     }
 
-    pub(super) struct Interface {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Interface {
         position: Position,
         generics: Any<types::Generic>,
         name: Token,
@@ -524,6 +600,7 @@ mod type_def {
         pipes: Some<InterfacePipe>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct InterfacePipe {
         position: Position,
         default: bool,
@@ -536,36 +613,42 @@ mod type_def {
 }
 
 /// Import blocks
-mod import {
+pub(super) mod import {
     use super::*;
 
-    pub(super) struct Use {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Use {
         position: Position,
-        kind: UseKind,
+        kind: Parsed<UseKind>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum UseKind {
         Direct(DirectUse),
         Package(NamedPackage),
         Symbol(NamedSymbol),
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum SymbolKind {
         All,
         Literal(Token),
         NamedLiterals(Some<NamedSymbol>),
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct DirectUse {
         package: Some<Token>,
         symbols: Option<SymbolKind>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct NamedPackage {
         package_name: Token,
         package: Some<Token>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     struct NamedSymbol {
         position: Position,
         name: Token,
@@ -574,14 +657,16 @@ mod import {
 }
 
 /// Generic expressions - objects which evaluate to something.
-mod expression {
+pub(super) mod expression {
     use super::*;
 
-    pub(super) struct Expression {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Expression {
         position: Position,
         kind: ExpressionKind,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     enum ExpressionKind {
         Call(call::Call),
         Block(block::Block),
@@ -589,11 +674,20 @@ mod expression {
         ProcedureEnd(statement::ProcedureEnd),
     }
 
+    #[derive(Debug)]
     pub struct Program {
         imports: Any<import::Use>,
-        kind: Any<ProgramKind>,
+        content: Any<ProgramElement>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
+    struct ProgramElement {
+        position: Position,
+        documentation: Option<String>,
+        kind: ProgramKind,
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
     enum ProgramKind {
         Type(type_def::TypeDef),
         Struct(type_def::Struct),
@@ -601,27 +695,153 @@ mod expression {
         Interface(type_def::Interface),
         Assignment(statement::Assignment),
         Implementation(procedure::Implementation),
+        UserError(CeaseError),
+    }
+
+    impl PartialEq for Program {
+        fn eq(&self, other: &Self) -> bool {
+            if !self.imports.eq(&other.imports) {
+                return false;
+            }
+            return self.content.eq(&other.content);
+        }
+    }
+
+    impl Program {
+        pub fn empty() -> Self {
+            Self {
+                content: None,
+                imports: None,
+            }
+        }
     }
 }
 
 /// Content of the package file
-mod package {
+pub(super) mod package {
     use super::*;
 
+    #[derive(Debug, PartialEq, Eq)]
     pub struct Package {
         position: Position,
-        package_name: Some<Token>,
+        documentation: Option<String>,
+        package_name: Parsed<Some<String>>,
     }
 
+    #[derive(Debug, PartialEq, Eq)]
     pub struct ExportedSymbol {
+        documentation: Option<String>,
         position: Position,
-        kind: ExportedSymbolKind,
+        package_local: bool,
+        kind: Parsed<ExportedSymbolKind>,
     }
 
-    enum ExportedSymbolKind {
-        Type,
-        Interface,
-        Function,
-        Property,
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum ExportedSymbolKind {
+        Type(String),
+        Interface(String),
+        Function(String),
+        Property(String),
+    }
+
+    impl Package {
+        pub fn new(documentation: Option<String>, position: Position, names: Some<String>) -> Self {
+            Self {
+                documentation,
+                package_name: Ok(names),
+                position,
+            }
+        }
+
+        pub fn new_error(
+            documentation: Option<String>,
+            position: Position,
+            error: SyntaxTreeError,
+        ) -> Self {
+            Self {
+                documentation,
+                package_name: Err(CeaseError::syntax_tree(
+                    error,
+                    ErrorLocation::Position(position.clone()),
+                )),
+                position,
+            }
+        }
+
+        #[cfg(test)]
+        pub fn name_error(self) -> CeaseError {
+            match self.package_name {
+                Ok(names) => panic!("Unexpected package name: {}", names.join("/")),
+                Err(e) => e,
+            }
+        }
+
+        #[cfg(test)]
+        pub fn name_parts(&self) -> Vec<String> {
+            match &self.package_name {
+                Err(e) => panic!("Unexpected package name error: {e}"),
+                Ok(names) => names
+                    .iter()
+                    .map(|name_part| format!("{name_part}"))
+                    .collect(),
+            }
+        }
+
+        #[cfg(test)]
+        pub fn documentation(&self) -> Option<String> {
+            self.documentation.clone()
+        }
+    }
+
+    impl ExportedSymbol {
+        pub fn new(
+            documentation: Option<String>,
+            position: Position,
+            package_local: bool,
+            kind: ExportedSymbolKind,
+        ) -> Self {
+            Self {
+                documentation,
+                position,
+                package_local,
+                kind: Ok(kind),
+            }
+        }
+
+        pub fn new_error(position: Position, error: SyntaxTreeError) -> Self {
+            let error = Err(CeaseError::syntax_tree(
+                error,
+                ErrorLocation::Position(position.clone()),
+            ));
+
+            Self {
+                documentation: None,
+                position,
+                package_local: false,
+                kind: error,
+            }
+        }
+
+        #[cfg(test)]
+        pub fn documentation(&self) -> Option<String> {
+            self.documentation.clone()
+        }
+
+        #[cfg(test)]
+        pub fn kind(&self) -> &Parsed<ExportedSymbolKind> {
+            &self.kind
+        }
+    }
+
+    impl ExportedSymbolKind {
+        pub fn from_keyword(keyword: Keyword, symbol_name: String) -> Result<Self, ()> {
+            Ok(match keyword {
+                Keyword::Type => Self::Type(symbol_name),
+                Keyword::Interface => Self::Interface(symbol_name),
+                Keyword::Fn => Self::Function(symbol_name),
+                Keyword::Property => Self::Property(symbol_name),
+                _ => return Err(()),
+            })
+        }
     }
 }

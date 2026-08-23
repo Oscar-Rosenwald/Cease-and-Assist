@@ -30,7 +30,7 @@ pub struct FileLocation {
 pub struct Position {
     file: FilePath,
     start_position: FileLocation,
-    end_position: Option<FileLocation>,
+    end_position: FileLocation,
 }
 
 impl Default for FileLocation {
@@ -57,24 +57,15 @@ impl FileLocation {
 
 impl std::fmt::Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.end_position {
-            None => write!(
-                f,
-                "{}:{}:{}",
-                self.file.to_string_lossy(),
-                self.start_position.line,
-                self.start_position.column
-            ),
-            Some(ref end) => write!(
-                f,
-                "{}: {}:{} - {}:{}",
-                self.file.to_string_lossy(),
-                self.start_position.line,
-                self.start_position.column,
-                end.line,
-                end.column,
-            ),
-        }
+        write!(
+            f,
+            "{}: {}:{} - {}:{}",
+            self.file.to_string_lossy(),
+            self.start_position.line,
+            self.start_position.column,
+            self.end_position.line,
+            self.end_position.column,
+        )
     }
 }
 
@@ -89,7 +80,7 @@ impl Position {
     ) -> Position {
         let ret = Self {
             start_position: FileLocation::new(start_line, start_column),
-            end_position: Some(FileLocation::new(end_line, end_column)),
+            end_position: FileLocation::new(end_line, end_column),
             file: file_path,
         };
         ret.validate();
@@ -101,7 +92,31 @@ impl Position {
         Self {
             file: file_path,
             start_position: start,
-            end_position: Some(end),
+            end_position: end,
+        }
+    }
+
+    pub fn merge(self, other: Self) -> Self {
+        let start_position = if self.start_position.line < other.start_position.line {
+            self.start_position
+        } else if self.start_position.column < other.start_position.column {
+            self.start_position
+        } else {
+            other.start_position
+        };
+
+        let end_position = if self.end_position.line > other.end_position.line {
+            self.end_position
+        } else if self.end_position.column > other.end_position.column {
+            self.end_position
+        } else {
+            other.end_position
+        };
+
+        Self {
+            file: self.file,
+            start_position,
+            end_position,
         }
     }
 
@@ -118,11 +133,7 @@ impl Position {
             panic!("Cannot have start column have a value < 1, have {start_column}");
         }
 
-        let Some(ref end_position) = self.end_position else {
-            return;
-        };
-
-        let (end_line, end_column) = (end_position.line, end_position.column);
+        let (end_line, end_column) = (self.end_position.line, self.end_position.column);
 
         if end_line < 1 {
             panic!("Cannot have end line have a value < 1, have {end_line}");
